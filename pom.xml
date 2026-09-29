@@ -12,7 +12,7 @@
 	<artifactId>carrental</artifactId>
 	<version>0.0.1-SNAPSHOT</version>
 	<name>carrental</name>
-	<description/>
+	<description>Car Rental System - BAI0168</description>
 	<url/>
 	<licenses>
 		<license/>
@@ -28,6 +28,9 @@
 	</scm>
 	<properties>
 		<java.version>21</java.version>
+		<!-- Web mode (default). The "desktop" profile below switches this to the desktop launcher. -->
+		<start-class>hu.nye.carrental.CarrentalApplication</start-class>
+		<javafx.version>21.0.6</javafx.version>
 	</properties>
 	<dependencies>
 		<dependency>
@@ -47,6 +50,18 @@
 			<artifactId>spring-boot-starter-webmvc</artifactId>
 		</dependency>
 
+		<!-- Desktop app: window + embedded browser -->
+		<dependency>
+			<groupId>org.openjfx</groupId>
+			<artifactId>javafx-controls</artifactId>
+			<version>${javafx.version}</version>
+		</dependency>
+		<dependency>
+			<groupId>org.openjfx</groupId>
+			<artifactId>javafx-web</artifactId>
+			<version>${javafx.version}</version>
+		</dependency>
+
 		<dependency>
 			<groupId>org.springframework.boot</groupId>
 			<artifactId>spring-boot-devtools</artifactId>
@@ -58,6 +73,13 @@
 			<artifactId>postgresql</artifactId>
 			<scope>runtime</scope>
 		</dependency>
+		<!-- Desktop app: embedded database (no Docker needed) -->
+		<dependency>
+			<groupId>com.h2database</groupId>
+			<artifactId>h2</artifactId>
+			<scope>runtime</scope>
+		</dependency>
+
 		<dependency>
 			<groupId>org.springframework.boot</groupId>
 			<artifactId>spring-boot-starter-data-jpa-test</artifactId>
@@ -85,8 +107,21 @@
 			<plugin>
 				<groupId>org.springframework.boot</groupId>
 				<artifactId>spring-boot-maven-plugin</artifactId>
+				<configuration>
+					<mainClass>${start-class}</mainClass>
+				</configuration>
 			</plugin>
 		</plugins>
 	</build>
+
+	<profiles>
+		<!-- ./mvnw -Pdesktop ... : run / package as a desktop application -->
+		<profile>
+			<id>desktop</id>
+			<properties>
+				<start-class>hu.nye.carrental.desktop.DesktopLauncher</start-class>
+			</properties>
+		</profile>
+	</profiles>
 
 </project>

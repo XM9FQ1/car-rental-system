@@ -142,3 +142,16 @@ so the system can be tried out right away. If the database already contains data
 
 - [User guide](docs/USER_GUIDE.md) – how to use every screen of the application
 - [ER diagram](docs/ER_DIAGRAM.md) – database tables, relationships and constraints
+
+---
+
+## Desktop application
+
+The system can also run as a normal desktop application: double-click to open, no browser, terminal or Docker needed.
+In desktop mode it uses an embedded **H2** database stored in `~/CarRentalData` (the web mode keeps using PostgreSQL).
+
+- Try it without packaging: `./mvnw -Pdesktop spring-boot:run`
+- Build the installer (macOS, JDK 21+ with `jpackage`): `./build-desktop.sh`
+  → `target/dist/Car Rental-1.0.0.dmg`. Open it and drag **Car Rental** into **Applications**.
+- On Windows, run the same `jpackage` command with `--type exe` to get an installer.
+- To start again with fresh sample data, delete the `~/CarRentalData` folder.
