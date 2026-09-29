@@ -1,0 +1,70 @@
+.root {
+    -fx-font-family: "System";
+    -fx-font-size: 13px;
+}
+.sidebar {
+    -fx-background-color: #212529;
+    -fx-padding: 18 12 18 12;
+    -fx-spacing: 6;
+    -fx-pref-width: 200;
+}
+.app-title {
+    -fx-text-fill: white;
+    -fx-font-size: 20px;
+    -fx-font-weight: bold;
+    -fx-padding: 0 0 18 6;
+}
+.nav-button {
+    -fx-background-color: transparent;
+    -fx-text-fill: #adb5bd;
+    -fx-font-size: 14px;
+    -fx-alignment: CENTER_LEFT;
+    -fx-padding: 8 12 8 12;
+    -fx-background-radius: 6;
+    -fx-cursor: hand;
+}
+.nav-button:hover {
+    -fx-background-color: #343a40;
+    -fx-text-fill: white;
+}
+.nav-button.active {
+    -fx-background-color: #0d6efd;
+    -fx-text-fill: white;
+}
+.page {
+    -fx-background-color: white;
+    -fx-padding: 24;
+    -fx-spacing: 16;
+}
+.page-title {
+    -fx-font-size: 24px;
+    -fx-font-weight: bold;
+}
+.primary-button {
+    -fx-background-color: #0d6efd;
+    -fx-text-fill: white;
+    -fx-background-radius: 6;
+    -fx-padding: 7 16 7 16;
+    -fx-cursor: hand;
+}
+.secondary-button {
+    -fx-background-color: white;
+    -fx-text-fill: #495057;
+    -fx-border-color: #adb5bd;
+    -fx-border-radius: 6;
+    -fx-background-radius: 6;
+    -fx-padding: 6 14 6 14;
+    -fx-cursor: hand;
+}
+.danger-button {
+    -fx-background-color: white;
+    -fx-text-fill: #dc3545;
+    -fx-border-color: #dc3545;
+    -fx-border-radius: 6;
+    -fx-background-radius: 6;
+    -fx-padding: 6 14 6 14;
+    -fx-cursor: hand;
+}
+.hint {
+    -fx-text-fill: #6c757d;
+}

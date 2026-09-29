@@ -28,7 +28,7 @@
 	</scm>
 	<properties>
 		<java.version>21</java.version>
-		<!-- Web mode (default). The "desktop" profile below switches this to the desktop launcher. -->
+		<!-- Web mode (default). The profiles below switch to a desktop launcher. -->
 		<start-class>hu.nye.carrental.CarrentalApplication</start-class>
 		<javafx.version>21.0.6</javafx.version>
 	</properties>
@@ -115,11 +115,18 @@
 	</build>
 
 	<profiles>
-		<!-- ./mvnw -Pdesktop ... : run / package as a desktop application -->
+		<!-- ./mvnw -Pdesktop ... : desktop window that shows the web pages (WebView) -->
 		<profile>
 			<id>desktop</id>
 			<properties>
 				<start-class>hu.nye.carrental.desktop.DesktopLauncher</start-class>
+			</properties>
+		</profile>
+		<!-- ./mvnw -Pfx ... : native JavaFX desktop application -->
+		<profile>
+			<id>fx</id>
+			<properties>
+				<start-class>hu.nye.carrental.fx.FxLauncher</start-class>
 			</properties>
 		</profile>
 	</profiles>
