@@ -36,8 +36,9 @@ public class Car {
     @JoinColumn(name = "category_id", nullable = false)
     private Category category;
 
+    // "^$|" -> boş değeri bu kural atlar; boşluk hatasını sadece @NotBlank verir.
     @NotBlank(message = "Plate number is required.")
-    @Pattern(regexp = "^[A-Za-z0-9 -]{2,15}$",
+    @Pattern(regexp = "^$|^[A-Za-z0-9 -]{2,15}$",
              message = "Plate number must be 2-15 characters (letters, digits, space or dash).")
     @Column(name = "plate_number", nullable = false, unique = true, length = 15)
     private String plateNumber;
