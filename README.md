@@ -121,3 +121,17 @@ To stop the application press `Ctrl + C`. To stop the database run `docker compo
 
 - `main` always contains a working version.
 - Each feature is developed in its own branch (e.g. `feature/customer-search`) and merged with a pull request.
+
+---
+
+## Sample data
+
+When the application starts with an **empty database**, it automatically loads sample data
+(7 brands, 5 categories, 10 cars, 6 customers and 6 rentals – closed, active and overdue),
+so the system can be tried out right away. If the database already contains data, nothing is changed.
+
+- To turn it off, set `app.seed-data=false` in `src/main/resources/application.properties`.
+- To start again from a clean database with fresh sample data:
+
+        docker compose down -v
+        docker compose up -d
