@@ -47,7 +47,7 @@
         <thead>
         <tr>
             <th>Plate</th>
-            <th>Brand</th>
+            <th>Car</th>
             <th>Category</th>
             <th class="text-end">Daily price</th>
             <th>Status</th>
@@ -57,7 +57,7 @@
         <tbody>
         <tr th:each="c : ${cars}">
             <td class="fw-semibold" th:text="${c.plateNumber}">ABC-123</td>
-            <td th:text="${c.brand.name}">Toyota</td>
+            <td th:text="${c.displayName}">Toyota Corolla 2023</td>
             <td th:text="${c.category.name}">SUV</td>
             <td class="text-end" th:text="${#numbers.formatDecimal(c.dailyPrice, 1, 'COMMA', 2, 'POINT')}">100.00</td>
             <td><span class="badge" th:classappend="${c.status.badgeClass}" th:text="${c.status.label}">Available</span></td>

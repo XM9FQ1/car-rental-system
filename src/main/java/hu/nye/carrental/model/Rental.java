@@ -39,9 +39,18 @@ public class Rental {
     @Column(name = "return_date")
     private LocalDate returnDate;
 
-    // Kiralama anındaki günlük fiyat (araç fiyatı sonradan değişse de bu sabit kalır)
+    // Kiralama anındaki günlük araç fiyatı (araç fiyatı sonradan değişse de bu sabit kalır)
     @Column(name = "daily_price", nullable = false, precision = 10, scale = 2)
     private BigDecimal dailyPrice;
+
+    // Seçilen sigorta paketi (eski kiralamalarda boş olabilir)
+    @ManyToOne
+    @JoinColumn(name = "insurance_plan_id")
+    private InsurancePlan insurancePlan;
+
+    // Kiralama anındaki günlük sigorta ücreti (paket fiyatı sonradan değişse de bu sabit kalır)
+    @Column(name = "insurance_daily_price", precision = 10, scale = 2)
+    private BigDecimal insuranceDailyPrice;
 
     // Araç dönünce hesaplanır
     @Column(name = "total_price", precision = 12, scale = 2)
@@ -68,12 +77,25 @@ public class Rental {
         return calculatePrice(plannedEndDate);
     }
 
-    // Toplam ücret = gün sayısı x günlük fiyat (en az 1 gün)
-    public BigDecimal calculatePrice(LocalDate endDate) {
-        return dailyPrice.multiply(BigDecimal.valueOf(daysBetween(startDate, endDate)));
+    public BigDecimal getInsuranceDailyPriceOrZero() {
+        return insuranceDailyPrice == null ? BigDecimal.ZERO : insuranceDailyPrice;
     }
 
-    private static long daysBetween(LocalDate from, LocalDate to) {
+    /** Car + insurance per day. */
+    public BigDecimal getTotalDailyRate() {
+        return dailyPrice.add(getInsuranceDailyPriceOrZero());
+    }
+
+    public String getInsuranceName() {
+        return insurancePlan == null ? "No insurance" : insurancePlan.getName();
+    }
+
+    // Toplam ücret = gün sayısı x (günlük araç fiyatı + günlük sigorta ücreti), en az 1 gün
+    public BigDecimal calculatePrice(LocalDate endDate) {
+        return getTotalDailyRate().multiply(BigDecimal.valueOf(daysBetween(startDate, endDate)));
+    }
+
+    public static long daysBetween(LocalDate from, LocalDate to) {
         long days = ChronoUnit.DAYS.between(from, to);
         return Math.max(1, days);
     }
@@ -134,6 +156,22 @@ public class Rental {
 
     public void setDailyPrice(BigDecimal dailyPrice) {
         this.dailyPrice = dailyPrice;
+    }
+
+    public InsurancePlan getInsurancePlan() {
+        return insurancePlan;
+    }
+
+    public void setInsurancePlan(InsurancePlan insurancePlan) {
+        this.insurancePlan = insurancePlan;
+    }
+
+    public BigDecimal getInsuranceDailyPrice() {
+        return insuranceDailyPrice;
+    }
+
+    public void setInsuranceDailyPrice(BigDecimal insuranceDailyPrice) {
+        this.insuranceDailyPrice = insuranceDailyPrice;
     }
 
     public BigDecimal getTotalPrice() {

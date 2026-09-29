@@ -3,13 +3,16 @@ package hu.nye.carrental.service;
 import hu.nye.carrental.model.Car;
 import hu.nye.carrental.model.CarStatus;
 import hu.nye.carrental.model.Customer;
+import hu.nye.carrental.model.InsurancePlan;
 import hu.nye.carrental.model.Rental;
 import hu.nye.carrental.repository.CarRepository;
 import hu.nye.carrental.repository.CustomerRepository;
+import hu.nye.carrental.repository.InsurancePlanRepository;
 import hu.nye.carrental.repository.RentalRepository;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.math.BigDecimal;
 import java.time.LocalDate;
 
 @Service
@@ -18,18 +21,28 @@ public class RentalService {
     private final RentalRepository rentalRepository;
     private final CarRepository carRepository;
     private final CustomerRepository customerRepository;
+    private final InsurancePlanRepository insurancePlanRepository;
 
     public RentalService(RentalRepository rentalRepository,
                          CarRepository carRepository,
-                         CustomerRepository customerRepository) {
+                         CustomerRepository customerRepository,
+                         InsurancePlanRepository insurancePlanRepository) {
         this.rentalRepository = rentalRepository;
         this.carRepository = carRepository;
         this.customerRepository = customerRepository;
+        this.insurancePlanRepository = insurancePlanRepository;
+    }
+
+    /** New rental with the basic (cheapest) insurance plan. Used by the web version. */
+    @Transactional
+    public Rental createRental(Long carId, Long customerId, LocalDate startDate, LocalDate plannedEndDate) {
+        return createRental(carId, customerId, startDate, plannedEndDate, null);
     }
 
     // Yeni kiralama: kiralama kaydı oluşur + araç RENTED olur (ikisi birlikte, tek transaction)
     @Transactional
-    public Rental createRental(Long carId, Long customerId, LocalDate startDate, LocalDate plannedEndDate) {
+    public Rental createRental(Long carId, Long customerId, LocalDate startDate, LocalDate plannedEndDate,
+                               Long insurancePlanId) {
         Car car = carRepository.findById(carId)
                 .orElseThrow(() -> new RentalException("The selected car does not exist."));
         Customer customer = customerRepository.findById(customerId)
@@ -42,12 +55,20 @@ public class RentalService {
             throw new RentalException("Planned return date cannot be before the start date.");
         }
 
+        // Paket seçilmediyse en ucuz (temel) paket kullanılır
+        InsurancePlan plan = (insurancePlanId != null)
+                ? insurancePlanRepository.findById(insurancePlanId)
+                        .orElseThrow(() -> new RentalException("The selected insurance plan does not exist."))
+                : insurancePlanRepository.findFirstByOrderByDailyPriceAsc().orElse(null);
+
         Rental rental = new Rental();
         rental.setCar(car);
         rental.setCustomer(customer);
         rental.setStartDate(startDate);
         rental.setPlannedEndDate(plannedEndDate);
         rental.setDailyPrice(car.getDailyPrice());
+        rental.setInsurancePlan(plan);
+        rental.setInsuranceDailyPrice(plan == null ? BigDecimal.ZERO : plan.getDailyPrice());
 
         car.setStatus(CarStatus.RENTED);
 

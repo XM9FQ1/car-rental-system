@@ -14,6 +14,7 @@ public interface RentalRepository extends JpaRepository<Rental, Long> {
            join fetch c.brand
            join fetch c.category
            join fetch r.customer
+           left join fetch r.insurancePlan
            order by r.startDate desc, r.id desc
            """)
     List<Rental> findAllWithDetails();
@@ -24,6 +25,7 @@ public interface RentalRepository extends JpaRepository<Rental, Long> {
            join fetch c.brand
            join fetch c.category
            join fetch r.customer
+           left join fetch r.insurancePlan
            where r.returnDate is null
            order by r.plannedEndDate asc
            """)
@@ -35,6 +37,7 @@ public interface RentalRepository extends JpaRepository<Rental, Long> {
            join fetch c.brand
            join fetch c.category
            join fetch r.customer
+           left join fetch r.insurancePlan
            where r.returnDate is not null
            order by r.returnDate desc, r.id desc
            """)
@@ -42,4 +45,7 @@ public interface RentalRepository extends JpaRepository<Rental, Long> {
 
     // Bu aracın açık (dönmemiş) bir kiralaması var mı?
     boolean existsByCar_IdAndReturnDateIsNull(Long carId);
+
+    // Bu sigorta paketi herhangi bir kiralamada kullanılmış mı?
+    boolean existsByInsurancePlan_Id(Long insurancePlanId);
 }

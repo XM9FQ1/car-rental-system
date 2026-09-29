@@ -3,10 +3,14 @@ package hu.nye.carrental.fx;
 import hu.nye.carrental.CarrentalApplication;
 import javafx.application.Application;
 import javafx.application.Platform;
+import javafx.collections.ListChangeListener;
+import javafx.geometry.Pos;
 import javafx.scene.Scene;
 import javafx.scene.control.Label;
-import javafx.scene.layout.StackPane;
+import javafx.scene.control.ProgressIndicator;
+import javafx.scene.layout.VBox;
 import javafx.stage.Stage;
+import javafx.stage.Window;
 import org.springframework.boot.SpringApplication;
 import org.springframework.boot.WebApplicationType;
 import org.springframework.context.ConfigurableApplicationContext;
@@ -19,19 +23,29 @@ import org.springframework.context.ConfigurableApplicationContext;
 public class FxApp extends Application {
 
     private ConfigurableApplicationContext context;
+    private String stylesheet;
 
     @Override
     public void start(Stage stage) {
-        Label loading = new Label("Starting Car Rental System...");
-        loading.setStyle("-fx-font-size: 16px;");
-        StackPane splash = new StackPane(loading);
+        stylesheet = getClass().getResource("/fx/app.css").toExternalForm();
+        styleEveryWindow();
 
-        Scene scene = new Scene(splash, 1200, 780);
-        scene.getStylesheets().add(getClass().getResource("/fx/app.css").toExternalForm());
+        Label logo = new Label("Car Rental");
+        logo.setGraphic(Icons.of(Icons.CAR, "splash-icon"));
+        logo.getStyleClass().add("splash-title");
+        Label loading = new Label("Starting Car Rental System...");
+        loading.getStyleClass().add("splash-text");
+        ProgressIndicator spinner = new ProgressIndicator();
+        spinner.setMaxSize(36, 36);
+        VBox splash = new VBox(18, logo, spinner, loading);
+        splash.setAlignment(Pos.CENTER);
+        splash.getStyleClass().add("splash");
+
+        Scene scene = new Scene(splash, 1280, 820);
 
         stage.setTitle("Car Rental System");
-        stage.setMinWidth(900);
-        stage.setMinHeight(600);
+        stage.setMinWidth(1000);
+        stage.setMinHeight(650);
         stage.setScene(scene);
         stage.show();
 
@@ -44,11 +58,38 @@ public class FxApp extends Application {
                 context = app.run(getParameters().getRaw().toArray(new String[0]));
                 Platform.runLater(() -> scene.setRoot(new MainView(context)));
             } catch (Exception e) {
-                Platform.runLater(() -> loading.setText("Could not start the application:\n" + e.getMessage()));
+                Platform.runLater(() -> {
+                    spinner.setVisible(false);
+                    loading.setText("Could not start the application:\n" + e.getMessage());
+                });
             }
         }, "spring-starter");
         starter.setDaemon(true);
         starter.start();
+    }
+
+    /** Adds app.css to every window (main window AND all pop-up dialogs), so they look the same. */
+    private void styleEveryWindow() {
+        Window.getWindows().addListener((ListChangeListener<Window>) change -> {
+            while (change.next()) {
+                for (Window window : change.getAddedSubList()) {
+                    if (window.getScene() != null) {
+                        addStylesheet(window.getScene());
+                    }
+                    window.sceneProperty().addListener((obs, oldScene, newScene) -> {
+                        if (newScene != null) {
+                            addStylesheet(newScene);
+                        }
+                    });
+                }
+            }
+        });
+    }
+
+    private void addStylesheet(Scene scene) {
+        if (!scene.getStylesheets().contains(stylesheet)) {
+            scene.getStylesheets().add(stylesheet);
+        }
     }
 
     @Override

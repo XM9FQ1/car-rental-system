@@ -35,21 +35,29 @@ public class MainView extends BorderPane {
         sidebar.getStyleClass().add("sidebar");
         Label title = new Label("Car Rental");
         title.getStyleClass().add("app-title");
+        title.setGraphic(Icons.of(Icons.CAR));
         sidebar.getChildren().add(title);
 
+        addNavButton(sidebar, "Dashboard");
         addNavButton(sidebar, "Rentals");
         addNavButton(sidebar, "Cars");
         addNavButton(sidebar, "Customers");
         addNavButton(sidebar, "Brands");
         addNavButton(sidebar, "Categories");
 
+        javafx.scene.layout.Region menuSpacer = new javafx.scene.layout.Region();
+        javafx.scene.layout.VBox.setVgrow(menuSpacer, javafx.scene.layout.Priority.ALWAYS);
+        Label footer = new Label("Car Rental System v3.0\nNYE - BAI0168");
+        footer.getStyleClass().add("sidebar-footer");
+        sidebar.getChildren().addAll(menuSpacer, footer);
         setLeft(sidebar);
-        show("Rentals");
+        show("Dashboard");
     }
 
     private void addNavButton(VBox sidebar, String name) {
         Button button = new Button(name);
         button.getStyleClass().add("nav-button");
+        button.setGraphic(Icons.nav(name));
         button.setMaxWidth(Double.MAX_VALUE);
         button.setOnAction(event -> show(name));
         navButtons.put(name, button);
@@ -65,6 +73,7 @@ public class MainView extends BorderPane {
         });
 
         Node view = switch (name) {
+            case "Dashboard" -> new hu.nye.carrental.fx.view.DashboardView(context, this::show);
             case "Rentals" -> {
                 RentalView rentalView = new RentalView(
                         context.getBean(RentalRepository.class),

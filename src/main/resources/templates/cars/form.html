@@ -26,6 +26,21 @@
             <div class="invalid-feedback" th:if="${#fields.hasErrors('brand')}" th:errors="*{brand}"></div>
         </div>
 
+        <div class="row">
+            <div class="col-md-8 mb-3">
+                <label for="model" class="form-label">Model</label>
+                <input type="text" th:field="*{model}" class="form-control"
+                       th:classappend="${#fields.hasErrors('model')} ? 'is-invalid'" placeholder="e.g. Corolla">
+                <div class="invalid-feedback" th:if="${#fields.hasErrors('model')}" th:errors="*{model}"></div>
+            </div>
+            <div class="col-md-4 mb-3">
+                <label for="year" class="form-label">Year</label>
+                <input type="number" th:field="*{year}" class="form-control"
+                       th:classappend="${#fields.hasErrors('year')} ? 'is-invalid'" placeholder="e.g. 2023">
+                <div class="invalid-feedback" th:if="${#fields.hasErrors('year')}" th:errors="*{year}"></div>
+            </div>
+        </div>
+
         <div class="mb-3">
             <label for="category" class="form-label">Category</label>
             <select id="category" name="category" class="form-select"
@@ -41,7 +56,7 @@
             <label for="plateNumber" class="form-label">Plate number</label>
             <input type="text" th:field="*{plateNumber}" class="form-control text-uppercase"
                    th:classappend="${#fields.hasErrors('plateNumber')} ? 'is-invalid'"
-                   placeholder="e.g. ABC-123">
+                   placeholder="e.g. AA-BC-123">
             <div class="invalid-feedback" th:if="${#fields.hasErrors('plateNumber')}" th:errors="*{plateNumber}"></div>
         </div>
 
@@ -60,6 +75,14 @@
                 <option th:each="s : ${statuses}" th:value="${s}" th:text="${s.label}"></option>
             </select>
             <div class="invalid-feedback" th:if="${#fields.hasErrors('status')}" th:errors="*{status}"></div>
+        </div>
+
+        <div class="mb-3">
+            <label for="imageUrl" class="form-label">Image URL (optional)</label>
+            <input type="url" th:field="*{imageUrl}" class="form-control"
+                   th:classappend="${#fields.hasErrors('imageUrl')} ? 'is-invalid'"
+                   placeholder="https://...">
+            <div class="invalid-feedback" th:if="${#fields.hasErrors('imageUrl')}" th:errors="*{imageUrl}"></div>
         </div>
 
         <div>
