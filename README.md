@@ -155,3 +155,12 @@ In desktop mode it uses an embedded **H2** database stored in `~/CarRentalData` 
   → `target/dist/Car Rental-1.0.0.dmg`. Open it and drag **Car Rental** into **Applications**.
 - On Windows, run the same `jpackage` command with `--type exe` to get an installer.
 - To start again with fresh sample data, delete the `~/CarRentalData` folder.
+
+### Native JavaFX interface (version 2.0)
+
+The desktop application now has its own native JavaFX screens (Rentals, Cars, Customers, Brands, Categories)
+instead of showing the web pages. It uses the same entities, repositories, validation rules and `RentalService`
+as the web version.
+
+- Run it without packaging: `./mvnw -Pfx spring-boot:run`
+- Build the installer: `./build-desktop.sh` → `target/dist/Car Rental-2.0.0.dmg`

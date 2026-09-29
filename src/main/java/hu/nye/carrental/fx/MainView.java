@@ -4,11 +4,13 @@ import hu.nye.carrental.fx.view.BrandView;
 import hu.nye.carrental.fx.view.CarView;
 import hu.nye.carrental.fx.view.CategoryView;
 import hu.nye.carrental.fx.view.CustomerView;
+import hu.nye.carrental.fx.view.RentalView;
 import hu.nye.carrental.repository.BrandRepository;
 import hu.nye.carrental.repository.CarRepository;
 import hu.nye.carrental.repository.CategoryRepository;
 import hu.nye.carrental.repository.CustomerRepository;
 import hu.nye.carrental.repository.RentalRepository;
+import hu.nye.carrental.service.RentalService;
 import jakarta.validation.Validator;
 import javafx.scene.Node;
 import javafx.scene.control.Button;
@@ -42,7 +44,7 @@ public class MainView extends BorderPane {
         addNavButton(sidebar, "Categories");
 
         setLeft(sidebar);
-        show("Cars");
+        show("Rentals");
     }
 
     private void addNavButton(VBox sidebar, String name) {
@@ -63,6 +65,15 @@ public class MainView extends BorderPane {
         });
 
         Node view = switch (name) {
+            case "Rentals" -> {
+                RentalView rentalView = new RentalView(
+                        context.getBean(RentalRepository.class),
+                        context.getBean(CarRepository.class),
+                        context.getBean(CustomerRepository.class),
+                        context.getBean(RentalService.class));
+                rentalView.refresh();
+                yield rentalView;
+            }
             case "Cars" -> {
                 CarView carView = new CarView(
                         context.getBean(CarRepository.class),
@@ -89,16 +100,8 @@ public class MainView extends BorderPane {
                 categoryView.refresh();
                 yield categoryView;
             }
-            default -> comingSoon(name);
+            default -> new VBox();
         };
         setCenter(view);
-    }
-
-    private Node comingSoon(String name) {
-        Label label = new Label("The " + name + " screen will be added in the next step.");
-        label.getStyleClass().add("hint");
-        VBox box = new VBox(label);
-        box.getStyleClass().add("page");
-        return box;
     }
 }
