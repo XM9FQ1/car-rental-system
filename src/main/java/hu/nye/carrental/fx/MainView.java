@@ -1,11 +1,14 @@
 package hu.nye.carrental.fx;
 
 import hu.nye.carrental.fx.view.BrandView;
+import hu.nye.carrental.fx.view.CarView;
 import hu.nye.carrental.fx.view.CategoryView;
 import hu.nye.carrental.fx.view.CustomerView;
 import hu.nye.carrental.repository.BrandRepository;
+import hu.nye.carrental.repository.CarRepository;
 import hu.nye.carrental.repository.CategoryRepository;
 import hu.nye.carrental.repository.CustomerRepository;
+import hu.nye.carrental.repository.RentalRepository;
 import jakarta.validation.Validator;
 import javafx.scene.Node;
 import javafx.scene.control.Button;
@@ -39,7 +42,7 @@ public class MainView extends BorderPane {
         addNavButton(sidebar, "Categories");
 
         setLeft(sidebar);
-        show("Customers");
+        show("Cars");
     }
 
     private void addNavButton(VBox sidebar, String name) {
@@ -60,6 +63,16 @@ public class MainView extends BorderPane {
         });
 
         Node view = switch (name) {
+            case "Cars" -> {
+                CarView carView = new CarView(
+                        context.getBean(CarRepository.class),
+                        context.getBean(BrandRepository.class),
+                        context.getBean(CategoryRepository.class),
+                        context.getBean(RentalRepository.class),
+                        context.getBean(Validator.class));
+                carView.refresh();
+                yield carView;
+            }
             case "Customers" -> {
                 CustomerView customerView = new CustomerView(
                         context.getBean(CustomerRepository.class), context.getBean(Validator.class));
