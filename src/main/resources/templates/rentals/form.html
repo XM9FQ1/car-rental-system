@@ -1,0 +1,69 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org">
+<head th:replace="~{fragments :: head('New rental')}"></head>
+<body>
+<nav th:replace="~{fragments :: navbar}"></nav>
+
+<main class="container">
+    <h1 class="h3 mb-3">New rental</h1>
+
+    <div th:if="${cars.isEmpty()}" class="alert alert-warning">
+        There are no available cars right now. <a th:href="@{/cars}">Check the cars list.</a>
+    </div>
+    <div th:if="${customers.isEmpty()}" class="alert alert-warning">
+        There are no customers yet. <a th:href="@{/customers/new}">Add a customer first.</a>
+    </div>
+
+    <form th:action="@{/rentals/save}" th:object="${rentalForm}" method="post" class="card card-body" style="max-width: 650px;">
+
+        <div th:if="${#fields.hasGlobalErrors()}" class="alert alert-danger">
+            <div th:each="err : ${#fields.globalErrors()}" th:text="${err}">Error</div>
+        </div>
+
+        <div class="mb-3">
+            <label for="carId" class="form-label">Car (only available cars are listed)</label>
+            <select th:field="*{carId}" class="form-select"
+                    th:classappend="${#fields.hasErrors('carId')} ? 'is-invalid'">
+                <option value="">-- Select car --</option>
+                <option th:each="c : ${cars}" th:value="${c.id}"
+                        th:text="${c.plateNumber + ' - ' + c.brand.name + ' ' + c.category.name + ' (' + c.dailyPrice + ' / day)'}">
+                    ABC-123 - Toyota SUV (45.00 / day)
+                </option>
+            </select>
+            <div class="invalid-feedback" th:if="${#fields.hasErrors('carId')}" th:errors="*{carId}"></div>
+        </div>
+
+        <div class="mb-3">
+            <label for="customerId" class="form-label">Customer</label>
+            <select th:field="*{customerId}" class="form-select"
+                    th:classappend="${#fields.hasErrors('customerId')} ? 'is-invalid'">
+                <option value="">-- Select customer --</option>
+                <option th:each="cu : ${customers}" th:value="${cu.id}"
+                        th:text="${cu.fullName + ' (' + cu.email + ')'}">Anna Kovacs</option>
+            </select>
+            <div class="invalid-feedback" th:if="${#fields.hasErrors('customerId')}" th:errors="*{customerId}"></div>
+        </div>
+
+        <div class="row">
+            <div class="col-md-6 mb-3">
+                <label for="startDate" class="form-label">Start date</label>
+                <input type="date" th:field="*{startDate}" class="form-control"
+                       th:classappend="${#fields.hasErrors('startDate')} ? 'is-invalid'">
+                <div class="invalid-feedback" th:if="${#fields.hasErrors('startDate')}" th:errors="*{startDate}"></div>
+            </div>
+            <div class="col-md-6 mb-3">
+                <label for="plannedEndDate" class="form-label">Planned return date</label>
+                <input type="date" th:field="*{plannedEndDate}" class="form-control"
+                       th:classappend="${#fields.hasErrors('plannedEndDate')} ? 'is-invalid'">
+                <div class="invalid-feedback" th:if="${#fields.hasErrors('plannedEndDate')}" th:errors="*{plannedEndDate}"></div>
+            </div>
+        </div>
+
+        <div>
+            <button type="submit" class="btn btn-primary">Create rental</button>
+            <a th:href="@{/rentals}" class="btn btn-link">Cancel</a>
+        </div>
+    </form>
+</main>
+</body>
+</html>

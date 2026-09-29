@@ -1,0 +1,58 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org">
+<head th:replace="~{fragments :: head('Return car')}"></head>
+<body>
+<nav th:replace="~{fragments :: navbar}"></nav>
+
+<main class="container" style="max-width: 700px;">
+    <h1 class="h3 mb-3">Return car</h1>
+
+    <div th:replace="~{fragments :: messages}"></div>
+
+    <div class="card mb-3">
+        <div class="card-body">
+            <dl class="row mb-0">
+                <dt class="col-sm-4">Car</dt>
+                <dd class="col-sm-8" th:text="${rental.car.plateNumber + ' - ' + rental.car.brand.name + ' ' + rental.car.category.name}">ABC-123</dd>
+
+                <dt class="col-sm-4">Customer</dt>
+                <dd class="col-sm-8" th:text="${rental.customer.fullName}">Anna Kovacs</dd>
+
+                <dt class="col-sm-4">Start date</dt>
+                <dd class="col-sm-8" th:text="${rental.startDate}">2026-01-01</dd>
+
+                <dt class="col-sm-4">Planned return</dt>
+                <dd class="col-sm-8" th:text="${rental.plannedEndDate}">2026-01-05</dd>
+
+                <dt class="col-sm-4">Daily price</dt>
+                <dd class="col-sm-8" th:text="${#numbers.formatDecimal(rental.dailyPrice, 1, 'COMMA', 2, 'POINT')}">45.00</dd>
+
+                <dt class="col-sm-4" th:if="${!rental.active}">Returned on</dt>
+                <dd class="col-sm-8" th:if="${!rental.active}" th:text="${rental.returnDate}">2026-01-05</dd>
+
+                <dt class="col-sm-4" th:if="${!rental.active}">Total price</dt>
+                <dd class="col-sm-8" th:if="${!rental.active}"
+                    th:text="${#numbers.formatDecimal(rental.totalPrice, 1, 'COMMA', 2, 'POINT')}">180.00</dd>
+            </dl>
+        </div>
+    </div>
+
+    <div th:if="${!rental.active}" class="alert alert-info">This rental is already closed.</div>
+
+    <form th:if="${rental.active}" th:action="@{/rentals/{id}/return(id=${rental.id})}" method="post" class="card card-body">
+        <div class="mb-3">
+            <label for="returnDate" class="form-label">Return date</label>
+            <input type="date" id="returnDate" name="returnDate" class="form-control"
+                   th:value="${today}" th:min="${rental.startDate}" required>
+            <div class="form-text">Total price = number of days x daily price (minimum 1 day).</div>
+        </div>
+        <div>
+            <button type="submit" class="btn btn-success">Confirm return</button>
+            <a th:href="@{/rentals}" class="btn btn-link">Cancel</a>
+        </div>
+    </form>
+
+    <a th:if="${!rental.active}" th:href="@{/rentals}" class="btn btn-outline-secondary">Back to rentals</a>
+</main>
+</body>
+</html>

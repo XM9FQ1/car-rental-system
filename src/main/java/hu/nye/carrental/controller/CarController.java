@@ -7,6 +7,7 @@ import hu.nye.carrental.model.Category;
 import hu.nye.carrental.repository.BrandRepository;
 import hu.nye.carrental.repository.CarRepository;
 import hu.nye.carrental.repository.CategoryRepository;
+import hu.nye.carrental.repository.RentalRepository;
 import jakarta.validation.Valid;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.http.HttpStatus;
@@ -31,16 +32,18 @@ public class CarController {
     private final CarRepository carRepository;
     private final BrandRepository brandRepository;
     private final CategoryRepository categoryRepository;
+    private final RentalRepository rentalRepository;
 
     public CarController(CarRepository carRepository,
                          BrandRepository brandRepository,
-                         CategoryRepository categoryRepository) {
+                         CategoryRepository categoryRepository,
+                         RentalRepository rentalRepository) {
         this.carRepository = carRepository;
         this.brandRepository = brandRepository;
         this.categoryRepository = categoryRepository;
+        this.rentalRepository = rentalRepository;
     }
 
-    // Bu listeler hem filtrelerde hem formda kullanılır; her sayfaya otomatik eklenir.
     @ModelAttribute("brands")
     public List<Brand> brands() {
         return brandRepository.findAllByOrderByNameAsc();
@@ -56,7 +59,6 @@ public class CarController {
         return CarStatus.values();
     }
 
-    // Listeleme + filtreleme: GET /cars?brandId=1&categoryId=2&status=AVAILABLE
     @GetMapping
     public String list(@RequestParam(required = false) Long brandId,
                        @RequestParam(required = false) Long categoryId,
@@ -99,6 +101,19 @@ public class CarController {
             if (duplicate) {
                 result.rejectValue("plateNumber", "duplicate", "A car with this plate number already exists.");
             }
+        }
+
+        // Durum kuralları: RENTED durumu sadece kiralama ile verilir / kaldırılır
+        boolean hasActiveRental = car.getId() != null
+                && rentalRepository.existsByCar_IdAndReturnDateIsNull(car.getId());
+        if (hasActiveRental) {
+            if (car.getStatus() != CarStatus.RENTED) {
+                result.rejectValue("status", "rented",
+                        "This car has an active rental. Close the rental to make it available again.");
+            }
+        } else if (car.getStatus() == CarStatus.RENTED) {
+            result.rejectValue("status", "auto",
+                    "The Rented status is set automatically when a rental is created.");
         }
 
         if (result.hasErrors()) {
