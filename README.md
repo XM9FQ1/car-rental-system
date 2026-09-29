@@ -135,3 +135,10 @@ so the system can be tried out right away. If the database already contains data
 
         docker compose down -v
         docker compose up -d
+
+---
+
+## Documentation
+
+- [User guide](docs/USER_GUIDE.md) – how to use every screen of the application
+- [ER diagram](docs/ER_DIAGRAM.md) – database tables, relationships and constraints
