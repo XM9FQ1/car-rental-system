@@ -1,0 +1,41 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org">
+<head th:replace="~{fragments :: head('Categories')}"></head>
+<body>
+<nav th:replace="~{fragments :: navbar}"></nav>
+
+<main class="container">
+    <div class="d-flex justify-content-between align-items-center mb-3">
+        <h1 class="h3 mb-0">Categories</h1>
+        <a th:href="@{/categories/new}" class="btn btn-primary">+ New category</a>
+    </div>
+
+    <div th:replace="~{fragments :: messages}"></div>
+
+    <table th:if="${!categories.isEmpty()}" class="table table-striped align-middle">
+        <thead>
+        <tr>
+            <th>ID</th>
+            <th>Name</th>
+            <th class="text-end">Actions</th>
+        </tr>
+        </thead>
+        <tbody>
+        <tr th:each="c : ${categories}">
+            <td th:text="${c.id}">1</td>
+            <td th:text="${c.name}">SUV</td>
+            <td class="text-end">
+                <a th:href="@{/categories/{id}/edit(id=${c.id})}" class="btn btn-sm btn-outline-secondary">Edit</a>
+                <form th:action="@{/categories/{id}/delete(id=${c.id})}" method="post" class="d-inline"
+                      onsubmit="return confirm('Are you sure you want to delete this category?');">
+                    <button type="submit" class="btn btn-sm btn-outline-danger">Delete</button>
+                </form>
+            </td>
+        </tr>
+        </tbody>
+    </table>
+
+    <p th:if="${categories.isEmpty()}" class="text-muted">No categories yet. Click "New category" to add one.</p>
+</main>
+</body>
+</html>
