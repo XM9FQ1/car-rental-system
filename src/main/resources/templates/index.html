@@ -1,0 +1,23 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org">
+<head th:replace="~{fragments :: head('Home')}"></head>
+<body>
+<nav th:replace="~{fragments :: navbar}"></nav>
+
+<main class="container">
+    <h1 class="h3 mb-4">Car Rental System</h1>
+
+    <div class="row g-3">
+        <div class="col-md-4">
+            <div class="card h-100">
+                <div class="card-body">
+                    <h2 class="h5 card-title">Brands</h2>
+                    <p class="card-text text-muted">Manage the list of car brands.</p>
+                    <a th:href="@{/brands}" class="btn btn-primary">Open</a>
+                </div>
+            </div>
+        </div>
+    </div>
+</main>
+</body>
+</html>
