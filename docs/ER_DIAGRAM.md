@@ -1,62 +1,65 @@
-# Car Rental System – ER Diagram
-
-The database has five tables. Hibernate creates them automatically from the entity classes in `src/main/java/hu/nye/carrental/model`.
+# ER diagram (version 3.0)
 
 ```mermaid
 erDiagram
-    BRANDS ||--o{ CARS : "brand of"
-    CATEGORIES ||--o{ CARS : "category of"
-    CARS ||--o{ RENTALS : "rented in"
+    BRANDS ||--o{ CARS : "has"
+    CATEGORIES ||--o{ CARS : "groups"
+    CARS ||--o{ RENTALS : "is rented in"
     CUSTOMERS ||--o{ RENTALS : "makes"
+    INSURANCE_PLANS ||--o{ RENTALS : "covers"
 
     BRANDS {
         bigint id PK
-        varchar name UK "max 50"
+        varchar name UK
     }
     CATEGORIES {
         bigint id PK
-        varchar name UK "max 50"
+        varchar name UK
     }
     CARS {
         bigint id PK
         bigint brand_id FK
         bigint category_id FK
-        varchar plate_number UK "max 15"
-        numeric daily_price "10,2"
+        varchar model
+        int model_year
+        varchar plate_number UK
+        decimal daily_price
         varchar status "AVAILABLE, RENTED, MAINTENANCE"
+        varchar image_url
     }
     CUSTOMERS {
         bigint id PK
-        varchar first_name "max 50"
-        varchar last_name "max 50"
-        varchar email UK "max 100"
-        varchar phone "max 20"
-        varchar license_number UK "max 20"
+        varchar first_name
+        varchar last_name
+        varchar email UK
+        varchar phone
+        varchar license_number UK
+    }
+    INSURANCE_PLANS {
+        bigint id PK
+        varchar name UK
+        varchar description
+        decimal daily_price
+        decimal deductible
     }
     RENTALS {
         bigint id PK
         bigint car_id FK
         bigint customer_id FK
+        bigint insurance_plan_id FK
         date start_date
         date planned_end_date
-        date return_date "NULL while the rental is active"
-        numeric daily_price "price saved at rental time"
-        numeric total_price "calculated on return"
+        date return_date "null while active"
+        decimal daily_price "car price saved at start"
+        decimal insurance_daily_price "insurance price saved at start"
+        decimal total_price "set when returned"
     }
 ```
 
-## Relationships
+## Notes
 
-| Relationship | Type | Meaning |
-| --- | --- | --- |
-| Brand – Car | 1 : N | A brand can have many cars; every car has exactly one brand |
-| Category – Car | 1 : N | A category can have many cars; every car has exactly one category |
-| Car – Rental | 1 : N | A car can be rented many times over time, but has at most one active rental (`return_date` is NULL) |
-| Customer – Rental | 1 : N | A customer can have many rentals; every rental belongs to exactly one customer |
-
-## Constraints
-
-- **Primary keys:** every table has an auto-generated `id`.
-- **Foreign keys:** `cars.brand_id`, `cars.category_id`, `rentals.car_id`, `rentals.customer_id`. Because of them, a brand, category, car or customer that is still referenced cannot be deleted.
-- **Unique:** `brands.name`, `categories.name`, `cars.plate_number`, `customers.email`, `customers.license_number`.
-- **Not null:** every column except `rentals.return_date` and `rentals.total_price`, which are filled when the car is returned.
+- A rental is **active** while `return_date` is empty; it is **overdue** when it is active and `planned_end_date` has passed.
+- `total_price = days x (daily_price + insurance_daily_price)`, minimum 1 day.
+- Prices are copied into the rental when it starts, so later price changes do not change old rentals.
+- `model_year` is used as the column name because `YEAR` is a reserved word in H2.
+- `image_url` is optional; the desktop app downloads the photo once and caches it in `~/CarRentalData/images`.

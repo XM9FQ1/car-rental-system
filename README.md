@@ -164,3 +164,21 @@ as the web version.
 
 - Run it without packaging: `./mvnw -Pfx spring-boot:run`
 - Build the installer: `./build-desktop.sh` → `target/dist/Car Rental-2.0.0.dmg`
+
+## Version 3.0 - redesigned desktop app
+
+Version 3.0 adds a new look and new features to the native JavaFX application:
+
+- **Dashboard** start screen: available cars, active and overdue rentals, revenue, current rentals, fleet status and insurance mix.
+- **Modern design**: dark sidebar with icons, cards, badges and a new theme for all windows and dialogs.
+- **Cars with photos**: every car has brand, **model**, **year** and a **photo** (image URL). Photos are downloaded once and cached in `~/CarRentalData/images`. The car editor has a **Find image online** button and a live preview. The sample cars use free photos from Wikimedia Commons.
+- **Insurance plans** like at a real rental company: Basic (included, deductible 1,500), Medium (11.00 / day, deductible 500) and Premium (24.00 / day, no deductible). Plans can be added, edited and deleted (not when used by a rental).
+- **Rentals with insurance**: the new rental window shows the car photo, insurance cards and a live price breakdown. Price = days x (car daily price + insurance daily price), minimum 1 day.
+
+Build the macOS installer:
+
+    ./build-desktop.sh
+
+The installer is created at `target/dist/Car Rental-3.0.0.dmg`.
+
+See also: [ER diagram](docs/ER_DIAGRAM.md) and [User guide](docs/USER_GUIDE.md).

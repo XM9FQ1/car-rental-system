@@ -183,3 +183,35 @@ The system blocks actions that would leave the data inconsistent. The table list
 - Total price = days × daily price (minimum 1 day), using the price saved when the rental was created.
 - An active rental past its planned return date is shown as **Overdue**.
 - Records that are part of the rental history (cars, customers, brands, categories in use) cannot be deleted.
+
+## Desktop application (version 3.0)
+
+Install: open `Car Rental-3.0.0.dmg`, drag **Car Rental** into **Applications**, then start it (the first time: right-click, **Open**). No Docker or browser is needed; data is stored in `~/CarRentalData`.
+
+Menu: **Dashboard, Rentals, Cars, Customers, Insurance, Brands, Categories**.
+
+### Dashboard
+Summary cards (available cars, active rentals, overdue, revenue). Click a card to open the related screen. Below: current rentals, fleet status and chosen insurance plans.
+
+### Cars with photos
+Cars are shown as photo cards. Filter by text, brand, category and status. Double-click a card to edit it. To add a photo: click **Find image online**, open a photo in the browser, right-click it and choose **Copy Image Address**, paste the link and click **Preview**.
+
+### Insurance
+| Plan | Daily price | Deductible | Covers |
+|---|---|---|---|
+| Basic | Included (0.00) | 1,500.00 | Third-party liability, collision damage waiver, theft protection |
+| Medium | 11.00 | 500.00 | Basic + windscreen and glass |
+| Premium | 24.00 | 0.00 | Glass, tyres, underbody, roof, 24/7 assistance, personal accident insurance |
+
+The deductible is the most the customer pays if the car is damaged. A plan used by a rental cannot be deleted.
+
+### Renting with insurance
+1. **Rentals** > **+ New rental**.
+2. Choose the customer and an available car.
+3. Check the start date and the planned end date.
+4. Click an insurance card; the price breakdown updates at once.
+5. Click **Start rental**.
+
+Return: double-click an active rental, choose the return date, check the price and click **Return car**.
+
+**Price = days x (car daily price + insurance daily price)**, minimum 1 day. Example: Toyota Corolla (45.00) with Premium (24.00) for 3 days = 3 x 69.00 = **207.00**.

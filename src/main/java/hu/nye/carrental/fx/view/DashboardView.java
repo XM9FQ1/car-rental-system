@@ -1,6 +1,7 @@
 package hu.nye.carrental.fx.view;
 
 import hu.nye.carrental.fx.Icons;
+import hu.nye.carrental.fx.ImageCache;
 import hu.nye.carrental.model.Car;
 import hu.nye.carrental.model.CarStatus;
 import hu.nye.carrental.model.Rental;
@@ -9,6 +10,7 @@ import hu.nye.carrental.repository.CustomerRepository;
 import hu.nye.carrental.repository.RentalRepository;
 import javafx.geometry.Pos;
 import javafx.scene.Node;
+import javafx.scene.control.Button;
 import javafx.scene.control.Label;
 import javafx.scene.control.ProgressBar;
 import javafx.scene.control.ScrollPane;
@@ -19,6 +21,8 @@ import javafx.scene.layout.Priority;
 import javafx.scene.layout.Region;
 import javafx.scene.layout.StackPane;
 import javafx.scene.layout.VBox;
+import javafx.scene.image.ImageView;
+import javafx.scene.shape.Rectangle;
 import org.springframework.context.ApplicationContext;
 
 import java.math.BigDecimal;
@@ -115,16 +119,16 @@ public class DashboardView extends ScrollPane {
             column.setHgrow(Priority.ALWAYS);
             stats.getColumnConstraints().add(column);
         }
-        stats.add(statCard(Icons.CAR, "accent-green", "Available cars",
+        stats.add(statCard(Icons.CAR, "accent-neutral", "Available cars",
                 String.valueOf(carsByStatus.get(CarStatus.AVAILABLE)),
                 "of " + cars.size() + " cars", "Cars"), 0, 0);
-        stats.add(statCard(Icons.KEY, "accent-blue", "Active rentals",
+        stats.add(statCard(Icons.KEY, "accent-neutral", "Active rentals",
                 String.valueOf(active.size()),
                 "expected " + MONEY.format(expected), "Rentals"), 1, 0);
-        stats.add(statCard(Icons.WARNING, overdue > 0 ? "accent-red" : "accent-gray", "Overdue",
+        stats.add(statCard(Icons.WARNING, overdue > 0 ? "accent-red" : "accent-neutral", "Overdue",
                 String.valueOf(overdue),
                 overdue > 0 ? "needs attention" : "all on time", "Rentals"), 2, 0);
-        stats.add(statCard(Icons.MONEY, "accent-purple", "Revenue",
+        stats.add(statCard(Icons.MONEY, "accent-neutral", "Revenue",
                 MONEY.format(revenue),
                 "from closed rentals", "Rentals"), 3, 0);
 
@@ -141,19 +145,24 @@ public class DashboardView extends ScrollPane {
 
     private Node statCard(String iconPath, String accent, String caption, String value,
                           String note, String target) {
-        StackPane iconBox = new StackPane(Icons.of(iconPath, "stat-icon"));
-        iconBox.getStyleClass().addAll("stat-icon-box", accent);
-
         Label captionLabel = new Label(caption);
         captionLabel.getStyleClass().add("stat-caption");
+        StackPane iconBox = new StackPane(Icons.of(iconPath, "stat-icon"));
+        iconBox.getStyleClass().addAll("stat-icon-box", accent);
+        Region spacer = new Region();
+        HBox.setHgrow(spacer, Priority.ALWAYS);
+        HBox top = new HBox(8, captionLabel, spacer, iconBox);
+        top.setAlignment(Pos.CENTER_LEFT);
+
         Label valueLabel = new Label(value);
         valueLabel.getStyleClass().add("stat-value");
         Label noteLabel = new Label(note);
         noteLabel.getStyleClass().add("stat-note");
+        if ("accent-red".equals(accent)) {
+            noteLabel.getStyleClass().add("stat-note-danger");
+        }
 
-        VBox texts = new VBox(2, captionLabel, valueLabel, noteLabel);
-        HBox card = new HBox(14, iconBox, texts);
-        card.setAlignment(Pos.CENTER_LEFT);
+        VBox card = new VBox(6, top, valueLabel, noteLabel);
         card.getStyleClass().addAll("card", "stat-card");
         card.setMaxWidth(Double.MAX_VALUE);
         card.setOnMouseClicked(event -> navigator.accept(target));
@@ -162,6 +171,11 @@ public class DashboardView extends ScrollPane {
 
     private VBox currentRentalsCard(List<Rental> active) {
         VBox card = card("Current rentals", "Open rentals, earliest due date first");
+        Button viewAll = new Button("View all");
+        viewAll.getStyleClass().add("card-link");
+        viewAll.setOnAction(event -> navigator.accept("Rentals"));
+        HBox header = (HBox) card.getChildren().get(0);
+        header.getChildren().add(viewAll);
         if (active.isEmpty()) {
             Label empty = new Label("No active rentals at the moment.");
             empty.getStyleClass().add("hint");
@@ -188,7 +202,7 @@ public class DashboardView extends ScrollPane {
                 badge = badge("Due " + format(rental.getPlannedEndDate()), "badge-info");
             }
 
-            HBox row = new HBox(12, Icons.of(Icons.CAR, "list-icon"), texts, spacer, badge);
+            HBox row = new HBox(12, thumbnail(rental.getCar().getImageUrl()), texts, spacer, badge);
             row.setAlignment(Pos.CENTER_LEFT);
             row.getStyleClass().add("list-row");
             row.setOnMouseClicked(event -> navigator.accept("Rentals"));
@@ -203,7 +217,7 @@ public class DashboardView extends ScrollPane {
     }
 
     private VBox fleetCard(Map<CarStatus, Integer> carsByStatus, int total) {
-        VBox card = card("Fleet status", null);
+        VBox card = card("Fleet status", "Cars by current status");
         for (CarStatus status : CarStatus.values()) {
             int count = carsByStatus.get(status);
             card.getChildren().add(barRow(status.getLabel(), count, total,
@@ -247,7 +261,11 @@ public class DashboardView extends ScrollPane {
     private VBox card(String title, String subtitle) {
         Label titleLabel = new Label(title);
         titleLabel.getStyleClass().add("card-title");
-        VBox card = new VBox(10, titleLabel);
+        Region spacer = new Region();
+        HBox.setHgrow(spacer, Priority.ALWAYS);
+        HBox header = new HBox(8, titleLabel, spacer);
+        header.setAlignment(Pos.CENTER_LEFT);
+        VBox card = new VBox(10, header);
         if (subtitle != null) {
             Label subtitleLabel = new Label(subtitle);
             subtitleLabel.getStyleClass().add("hint");
@@ -255,6 +273,26 @@ public class DashboardView extends ScrollPane {
         }
         card.getStyleClass().add("card");
         return card;
+    }
+
+    private static Node thumbnail(String url) {
+        ImageView view = new ImageView();
+        Region placeholder = Icons.of(Icons.CAR, "list-icon");
+        StackPane box = new StackPane(placeholder, view);
+        box.getStyleClass().add("thumb");
+        box.setMinSize(56, 38);
+        box.setMaxSize(56, 38);
+        Rectangle clip = new Rectangle(56, 38);
+        clip.setArcWidth(12);
+        clip.setArcHeight(12);
+        box.setClip(clip);
+        ImageCache.load(url, image -> {
+            if (image != null) {
+                RentalView.showCover(view, image, 56, 38);
+                placeholder.setVisible(false);
+            }
+        });
+        return box;
     }
 
     private static Label badge(String text, String styleClass) {

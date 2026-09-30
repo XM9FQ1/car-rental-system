@@ -10,6 +10,7 @@ import javafx.scene.Scene;
 import javafx.scene.control.Label;
 import javafx.scene.control.ProgressIndicator;
 import javafx.scene.layout.VBox;
+import javafx.scene.text.Font;
 import javafx.stage.Stage;
 import javafx.stage.Window;
 import org.springframework.boot.SpringApplication;
@@ -38,6 +39,7 @@ public class FxApp extends Application {
     @Override
     public void start(Stage stage) {
         hostServices = getHostServices();
+        loadFonts();
         stylesheet = getClass().getResource("/fx/app.css").toExternalForm();
         styleEveryWindow();
 
@@ -52,7 +54,7 @@ public class FxApp extends Application {
         splash.setAlignment(Pos.CENTER);
         splash.getStyleClass().add("splash");
 
-        Scene scene = new Scene(splash, 1280, 820);
+        Scene scene = new Scene(splash, 1320, 840);
 
         stage.setTitle("Car Rental System");
         stage.setMinWidth(1000);
@@ -77,6 +79,19 @@ public class FxApp extends Application {
         }, "spring-starter");
         starter.setDaemon(true);
         starter.start();
+    }
+
+    /** Loads the bundled Inter font (used by app.css) before any screen is shown. */
+    private void loadFonts() {
+        for (String file : new String[] {"Inter-Regular", "Inter-Medium", "Inter-SemiBold", "Inter-Bold"}) {
+            try (var in = FxApp.class.getResourceAsStream("/fx/fonts/" + file + ".ttf")) {
+                if (in != null) {
+                    Font.loadFont(in, 13);
+                }
+            } catch (Exception e) {
+                System.err.println("Could not load font " + file + ": " + e.getMessage());
+            }
+        }
     }
 
     /** Adds app.css to every window (main window AND all pop-up dialogs), so they look the same. */
