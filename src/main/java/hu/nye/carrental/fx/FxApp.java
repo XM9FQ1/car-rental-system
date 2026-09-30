@@ -2,6 +2,7 @@ package hu.nye.carrental.fx;
 
 import hu.nye.carrental.CarrentalApplication;
 import javafx.application.Application;
+import javafx.application.HostServices;
 import javafx.application.Platform;
 import javafx.collections.ListChangeListener;
 import javafx.geometry.Pos;
@@ -22,11 +23,21 @@ import org.springframework.context.ConfigurableApplicationContext;
  */
 public class FxApp extends Application {
 
+    private static HostServices hostServices;
+
     private ConfigurableApplicationContext context;
     private String stylesheet;
 
+    /** Opens a web page in the default browser (used by "Find image online"). */
+    public static void openInBrowser(String url) {
+        if (hostServices != null) {
+            hostServices.showDocument(url);
+        }
+    }
+
     @Override
     public void start(Stage stage) {
+        hostServices = getHostServices();
         stylesheet = getClass().getResource("/fx/app.css").toExternalForm();
         styleEveryWindow();
 

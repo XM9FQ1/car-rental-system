@@ -424,3 +424,42 @@
     -fx-text-fill: white;
     -fx-font-weight: bold;
 }
+
+/* ---------- Car cards (D3) ---------- */
+.car-card {
+    -fx-padding: 12;
+    -fx-cursor: hand;
+}
+.car-card:hover {
+    -fx-border-color: #93c5fd;
+    -fx-effect: dropshadow(gaussian, rgba(37,99,235,0.2), 18, 0.15, 0, 4);
+}
+.car-image {
+    -fx-background-color: linear-gradient(to bottom right, #e2e8f0, #cbd5e1);
+    -fx-background-radius: 10;
+}
+.icon.car-placeholder {
+    -fx-min-width: 72; -fx-min-height: 56;
+    -fx-pref-width: 72; -fx-pref-height: 56;
+    -fx-max-width: 72; -fx-max-height: 56;
+    -fx-background-color: #94a3b8;
+}
+.car-name {
+    -fx-font-size: 16px;
+    -fx-font-weight: bold;
+    -fx-text-fill: #0f172a;
+    -fx-padding: 4 0 0 2;
+}
+.car-price {
+    -fx-font-size: 18px;
+    -fx-font-weight: bold;
+    -fx-text-fill: #2563eb;
+}
+.preview-message {
+    -fx-background-color: rgba(15,23,42,0.7);
+    -fx-text-fill: white;
+    -fx-background-radius: 6;
+    -fx-padding: 4 8 4 8;
+    -fx-font-size: 11px;
+    -fx-wrap-text: true;
+}

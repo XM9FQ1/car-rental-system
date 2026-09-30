@@ -1,6 +1,10 @@
 package hu.nye.carrental.fx.view;
 
+import hu.nye.carrental.fx.DefaultCarImages;
 import hu.nye.carrental.fx.Dialogs;
+import hu.nye.carrental.fx.FxApp;
+import hu.nye.carrental.fx.Icons;
+import hu.nye.carrental.fx.ImageCache;
 import hu.nye.carrental.model.Brand;
 import hu.nye.carrental.model.Car;
 import hu.nye.carrental.model.CarStatus;
@@ -10,13 +14,14 @@ import hu.nye.carrental.repository.CarRepository;
 import hu.nye.carrental.repository.CategoryRepository;
 import hu.nye.carrental.repository.RentalRepository;
 import jakarta.validation.ConstraintViolation;
+import jakarta.validation.Validation;
 import jakarta.validation.Validator;
-import javafx.beans.property.SimpleObjectProperty;
-import javafx.beans.property.SimpleStringProperty;
 import javafx.collections.FXCollections;
 import javafx.event.ActionEvent;
 import javafx.geometry.Insets;
 import javafx.geometry.Pos;
+import javafx.geometry.Rectangle2D;
+import javafx.scene.Node;
 import javafx.scene.control.Button;
 import javafx.scene.control.ButtonBar;
 import javafx.scene.control.ButtonType;
@@ -24,346 +29,521 @@ import javafx.scene.control.ComboBox;
 import javafx.scene.control.Dialog;
 import javafx.scene.control.Label;
 import javafx.scene.control.ListCell;
-import javafx.scene.control.TableCell;
-import javafx.scene.control.TableColumn;
-import javafx.scene.control.TableRow;
-import javafx.scene.control.TableView;
+import javafx.scene.control.ListView;
+import javafx.scene.control.ScrollPane;
 import javafx.scene.control.TextField;
+import javafx.scene.image.Image;
+import javafx.scene.image.ImageView;
+import javafx.scene.layout.FlowPane;
 import javafx.scene.layout.GridPane;
 import javafx.scene.layout.HBox;
 import javafx.scene.layout.Priority;
 import javafx.scene.layout.Region;
+import javafx.scene.layout.StackPane;
 import javafx.scene.layout.VBox;
+import javafx.scene.shape.Rectangle;
+import javafx.util.Callback;
+import javafx.util.StringConverter;
+import org.springframework.context.ApplicationContext;
 import org.springframework.dao.DataIntegrityViolationException;
 
 import java.math.BigDecimal;
+import java.net.URLEncoder;
+import java.nio.charset.StandardCharsets;
+import java.text.DecimalFormat;
 import java.util.ArrayList;
-import java.util.Comparator;
 import java.util.List;
 import java.util.Locale;
-import java.util.Optional;
+import java.util.Set;
 import java.util.function.Function;
+import java.util.stream.Collectors;
 
-/** Cars screen (JavaFX): filters, list, add, edit, delete. */
+/**
+ * Cars screen (JavaFX): photo cards with filters, and an editor with
+ * brand / model / year / category / plate / price / status / photo.
+ */
 public class CarView extends VBox {
 
-    private static final List<String> FIELD_ORDER =
-            List.of("brand", "category", "plateNumber", "dailyPrice", "status");
+    private static final double CARD_WIDTH = 280;
+    private static final double IMAGE_HEIGHT = 165;
+    private static final double PREVIEW_WIDTH = 320;
+    private static final double PREVIEW_HEIGHT = 190;
+    private static final DecimalFormat MONEY = new DecimalFormat("#,##0.00");
 
     private final CarRepository carRepository;
     private final BrandRepository brandRepository;
     private final CategoryRepository categoryRepository;
     private final RentalRepository rentalRepository;
-    private final Validator validator;
+    private final Validator validator = Validation.buildDefaultValidatorFactory().getValidator();
 
-    private final TableView<Car> table = new TableView<>();
+    private final TextField searchField = new TextField();
     private final ComboBox<Brand> brandFilter = new ComboBox<>();
     private final ComboBox<Category> categoryFilter = new ComboBox<>();
     private final ComboBox<CarStatus> statusFilter = new ComboBox<>();
+    private final FlowPane grid = new FlowPane(18, 18);
+    private final Label countLabel = new Label();
+    private List<Car> allCars = new ArrayList<>();
 
-    /** What the form produced: the car + whether the price text was not a valid number. */
-    private record CarInput(Car car, boolean priceInvalid) {
-    }
+    public CarView(ApplicationContext context) {
+        this.carRepository = context.getBean(CarRepository.class);
+        this.brandRepository = context.getBean(BrandRepository.class);
+        this.categoryRepository = context.getBean(CategoryRepository.class);
+        this.rentalRepository = context.getBean(RentalRepository.class);
 
-    public CarView(CarRepository carRepository, BrandRepository brandRepository,
-                   CategoryRepository categoryRepository, RentalRepository rentalRepository,
-                   Validator validator) {
-        this.carRepository = carRepository;
-        this.brandRepository = brandRepository;
-        this.categoryRepository = categoryRepository;
-        this.rentalRepository = rentalRepository;
-        this.validator = validator;
         getStyleClass().add("page");
 
-        Label heading = new Label("Cars");
-        heading.getStyleClass().add("page-title");
-        Region spacer = new Region();
-        HBox.setHgrow(spacer, Priority.ALWAYS);
+        Label title = new Label("Cars");
+        title.getStyleClass().add("page-title");
+        Label subtitle = new Label("Your fleet with photos. Double-click a card to edit it.");
+        subtitle.getStyleClass().add("page-subtitle");
+        VBox titles = new VBox(2, title, subtitle);
+        Region headerSpacer = new Region();
+        HBox.setHgrow(headerSpacer, Priority.ALWAYS);
         Button addButton = new Button("+ New car");
         addButton.getStyleClass().add("primary-button");
         addButton.setOnAction(event -> openEditor(null));
-        HBox header = new HBox(12, heading, spacer, addButton);
+        HBox header = new HBox(12, titles, headerSpacer, addButton);
         header.setAlignment(Pos.CENTER_LEFT);
 
-        configure(brandFilter, Brand::getName, "All brands");
-        configure(categoryFilter, Category::getName, "All categories");
-        configure(statusFilter, CarStatus::getLabel, "All statuses");
-        brandFilter.getItems().add(null);
-        brandFilter.getItems().addAll(brandRepository.findAllByOrderByNameAsc());
-        categoryFilter.getItems().add(null);
-        categoryFilter.getItems().addAll(categoryRepository.findAllByOrderByNameAsc());
-        statusFilter.getItems().add(null);
-        statusFilter.getItems().addAll(CarStatus.values());
-        brandFilter.setPrefWidth(200);
-        categoryFilter.setPrefWidth(200);
-        statusFilter.setPrefWidth(200);
-        brandFilter.setOnAction(event -> refresh());
-        categoryFilter.setOnAction(event -> refresh());
-        statusFilter.setOnAction(event -> refresh());
-
-        Button clearButton = new Button("Clear");
-        clearButton.getStyleClass().add("secondary-button");
-        clearButton.setOnAction(event -> {
-            brandFilter.setValue(null);
-            categoryFilter.setValue(null);
-            statusFilter.setValue(null);
-            refresh();
-        });
-        HBox filters = new HBox(8, brandFilter, categoryFilter, statusFilter, clearButton);
+        searchField.setPromptText("Search brand, model or plate");
+        searchField.setPrefWidth(240);
+        searchField.textProperty().addListener((obs, oldText, newText) -> applyFilters());
+        setupFilter(brandFilter, brandRepository.findAllByOrderByNameAsc(), "All brands", Brand::getName);
+        setupFilter(categoryFilter, categoryRepository.findAllByOrderByNameAsc(), "All categories", Category::getName);
+        setupFilter(statusFilter, List.of(CarStatus.values()), "All statuses", CarStatus::getLabel);
+        brandFilter.valueProperty().addListener((obs, oldValue, newValue) -> applyFilters());
+        categoryFilter.valueProperty().addListener((obs, oldValue, newValue) -> applyFilters());
+        statusFilter.valueProperty().addListener((obs, oldValue, newValue) -> applyFilters());
+        Region filterSpacer = new Region();
+        HBox.setHgrow(filterSpacer, Priority.ALWAYS);
+        countLabel.getStyleClass().add("hint");
+        HBox filters = new HBox(10, searchField, brandFilter, categoryFilter, statusFilter, filterSpacer, countLabel);
         filters.setAlignment(Pos.CENTER_LEFT);
 
-        TableColumn<Car, String> plateColumn = textColumn("Plate", Car::getPlateNumber, 140);
-        plateColumn.setStyle("-fx-font-weight: bold;");
-        TableColumn<Car, String> priceColumn = textColumn("Daily price",
-                car -> String.format(Locale.US, "%.2f", car.getDailyPrice()), 120);
-        priceColumn.setStyle("-fx-alignment: CENTER-RIGHT;");
+        grid.setPadding(new Insets(4, 4, 24, 4));
+        ScrollPane scroll = new ScrollPane(grid);
+        scroll.setFitToWidth(true);
+        scroll.getStyleClass().add("page-scroll");
+        VBox.setVgrow(scroll, Priority.ALWAYS);
 
-        TableColumn<Car, CarStatus> statusColumn = new TableColumn<>("Status");
-        statusColumn.setCellValueFactory(cell -> new SimpleObjectProperty<>(cell.getValue().getStatus()));
-        statusColumn.setCellFactory(column -> new TableCell<>() {
-            @Override
-            protected void updateItem(CarStatus status, boolean empty) {
-                super.updateItem(status, empty);
-                setText(null);
-                if (empty || status == null) {
-                    setGraphic(null);
-                    return;
-                }
-                Label badge = new Label(status.getLabel());
-                badge.setStyle(badgeStyle(status));
-                setGraphic(badge);
-            }
-        });
-        statusColumn.setPrefWidth(140);
-
-        table.getColumns().add(plateColumn);
-        table.getColumns().add(textColumn("Brand", car -> car.getBrand().getName(), 180));
-        table.getColumns().add(textColumn("Category", car -> car.getCategory().getName(), 180));
-        table.getColumns().add(priceColumn);
-        table.getColumns().add(statusColumn);
-        table.setColumnResizePolicy(TableView.CONSTRAINED_RESIZE_POLICY_FLEX_LAST_COLUMN);
-        table.setPlaceholder(new Label("No cars found."));
-        table.setRowFactory(tableView -> {
-            TableRow<Car> row = new TableRow<>();
-            row.setOnMouseClicked(event -> {
-                if (event.getClickCount() == 2 && row.getItem() != null) {
-                    openEditor(row.getItem());
-                }
-            });
-            return row;
-        });
-        VBox.setVgrow(table, Priority.ALWAYS);
-
-        Button editButton = new Button("Edit");
-        editButton.getStyleClass().add("secondary-button");
-        editButton.disableProperty().bind(table.getSelectionModel().selectedItemProperty().isNull());
-        editButton.setOnAction(event -> openEditor(table.getSelectionModel().getSelectedItem()));
-
-        Button deleteButton = new Button("Delete");
-        deleteButton.getStyleClass().add("danger-button");
-        deleteButton.disableProperty().bind(table.getSelectionModel().selectedItemProperty().isNull());
-        deleteButton.setOnAction(event -> delete(table.getSelectionModel().getSelectedItem()));
-
-        Label hint = new Label("Tip: double-click a row to edit it.");
-        hint.getStyleClass().add("hint");
-        HBox actions = new HBox(8, editButton, deleteButton, hint);
-        actions.setAlignment(Pos.CENTER_LEFT);
-
-        getChildren().addAll(header, filters, table, actions);
+        getChildren().addAll(header, filters, scroll);
+        refresh();
     }
 
-    /** Reloads the table using the selected filters. */
+    /** Reloads the cars from the database. */
     public void refresh() {
-        Long brandId = brandFilter.getValue() == null ? null : brandFilter.getValue().getId();
-        Long categoryId = categoryFilter.getValue() == null ? null : categoryFilter.getValue().getId();
+        allCars = new ArrayList<>(carRepository.search(null, null, null));
+        for (Car car : allCars) {
+            if (car.getImageUrl() == null || car.getImageUrl().isBlank()) {
+                String url = DefaultCarImages.find(car.getBrand().getName(), car.getModel());
+                if (url != null) {
+                    car.setImageUrl(url);
+                    carRepository.save(car);
+                }
+            }
+        }
+        applyFilters();
+    }
+
+    private void applyFilters() {
+        String text = searchField.getText() == null ? "" : searchField.getText().trim().toLowerCase(Locale.ROOT);
+        Brand brand = brandFilter.getValue();
+        Category category = categoryFilter.getValue();
         CarStatus status = statusFilter.getValue();
-        table.setItems(FXCollections.observableArrayList(carRepository.search(brandId, categoryId, status)));
+
+        List<Car> visible = allCars.stream()
+                .filter(car -> brand == null || car.getBrand().getId().equals(brand.getId()))
+                .filter(car -> category == null || car.getCategory().getId().equals(category.getId()))
+                .filter(car -> status == null || car.getStatus() == status)
+                .filter(car -> text.isEmpty()
+                        || (car.getBrand().getName() + " " + car.getModel() + " " + car.getPlateNumber())
+                        .toLowerCase(Locale.ROOT).contains(text))
+                .toList();
+
+        grid.getChildren().clear();
+        for (Car car : visible) {
+            grid.getChildren().add(card(car));
+        }
+        if (visible.isEmpty()) {
+            Label empty = new Label(allCars.isEmpty() ? "No cars yet. Click \"+ New car\" to add one."
+                    : "No cars match the filters.");
+            empty.getStyleClass().add("hint");
+            grid.getChildren().add(empty);
+        }
+        countLabel.setText(visible.size() + " of " + allCars.size() + " cars");
     }
 
-    private TableColumn<Car, String> textColumn(String title, Function<Car, String> getter, double width) {
-        TableColumn<Car, String> column = new TableColumn<>(title);
-        column.setCellValueFactory(cell -> new SimpleStringProperty(getter.apply(cell.getValue())));
-        column.setPrefWidth(width);
-        return column;
-    }
-
-    private static String badgeStyle(CarStatus status) {
-        String colors = switch (status) {
-            case AVAILABLE -> "-fx-background-color: #198754; -fx-text-fill: white;";
-            case RENTED -> "-fx-background-color: #ffc107; -fx-text-fill: #212529;";
-            case MAINTENANCE -> "-fx-background-color: #6c757d; -fx-text-fill: white;";
-        };
-        return colors + " -fx-padding: 2 8 2 8; -fx-background-radius: 6; -fx-font-weight: bold; -fx-font-size: 11px;";
-    }
-
-    /** Shows readable text in a drop-down list; a null item shows nullText (e.g. "All brands"). */
-    private static <T> void configure(ComboBox<T> box, Function<T, String> text, String nullText) {
-        box.setCellFactory(listView -> new ListCell<>() {
-            @Override
-            protected void updateItem(T item, boolean empty) {
-                super.updateItem(item, empty);
-                setText(empty ? null : (item == null ? nullText : text.apply(item)));
+    private Node card(Car car) {
+        StackPane imageBox = new StackPane();
+        imageBox.getStyleClass().add("car-image");
+        imageBox.setMinSize(CARD_WIDTH, IMAGE_HEIGHT);
+        imageBox.setMaxSize(CARD_WIDTH, IMAGE_HEIGHT);
+        Region placeholder = Icons.of(Icons.CAR, "car-placeholder");
+        ImageView imageView = new ImageView();
+        Label statusBadge = statusBadge(car.getStatus());
+        StackPane.setAlignment(statusBadge, Pos.TOP_LEFT);
+        StackPane.setMargin(statusBadge, new Insets(10));
+        imageBox.getChildren().addAll(placeholder, imageView, statusBadge);
+        Rectangle clip = new Rectangle(CARD_WIDTH, IMAGE_HEIGHT);
+        clip.setArcWidth(20);
+        clip.setArcHeight(20);
+        imageBox.setClip(clip);
+        ImageCache.load(car.getImageUrl(), image -> {
+            if (image != null) {
+                showCover(imageView, image, CARD_WIDTH, IMAGE_HEIGHT);
+                placeholder.setVisible(false);
             }
         });
-        box.setButtonCell(new ListCell<>() {
-            @Override
-            protected void updateItem(T item, boolean empty) {
-                super.updateItem(item, empty);
-                setText(empty || item == null ? nullText : text.apply(item));
+
+        Label name = new Label(car.getBrand().getName() + " " + car.getModel());
+        name.getStyleClass().add("car-name");
+        Label details = new Label(car.getYear() + "  ·  " + car.getCategory().getName()
+                + "  ·  " + car.getPlateNumber());
+        details.getStyleClass().add("hint");
+
+        Label price = new Label(car.getDailyPrice() == null ? "-" : MONEY.format(car.getDailyPrice()));
+        price.getStyleClass().add("car-price");
+        Label perDay = new Label("/ day");
+        perDay.getStyleClass().add("hint");
+        HBox priceLine = new HBox(4, price, perDay);
+        priceLine.setAlignment(Pos.BASELINE_LEFT);
+
+        Button edit = new Button("Edit");
+        edit.getStyleClass().add("secondary-button");
+        edit.setOnAction(event -> openEditor(car));
+        Button delete = new Button("Delete");
+        delete.getStyleClass().add("danger-button");
+        delete.setOnAction(event -> delete(car));
+        Region spacer = new Region();
+        HBox.setHgrow(spacer, Priority.ALWAYS);
+        HBox bottom = new HBox(8, priceLine, spacer, edit, delete);
+        bottom.setAlignment(Pos.CENTER_LEFT);
+
+        VBox card = new VBox(8, imageBox, name, details, bottom);
+        card.getStyleClass().addAll("card", "car-card");
+        card.setPrefWidth(CARD_WIDTH + 24);
+        card.setMaxWidth(CARD_WIDTH + 24);
+        card.setOnMouseClicked(event -> {
+            if (event.getClickCount() == 2) {
+                openEditor(car);
             }
         });
+        return card;
     }
 
     private void openEditor(Car existing) {
-        boolean isNew = (existing == null);
+        boolean isNew = existing == null;
+        boolean hasActiveRental = !isNew && rentalRepository.existsByCar_IdAndReturnDateIsNull(existing.getId());
 
-        ComboBox<Brand> brand = new ComboBox<>(FXCollections.observableArrayList(brandRepository.findAllByOrderByNameAsc()));
-        configure(brand, Brand::getName, "-- Select brand --");
-        ComboBox<Category> category = new ComboBox<>(FXCollections.observableArrayList(categoryRepository.findAllByOrderByNameAsc()));
-        configure(category, Category::getName, "-- Select category --");
-        TextField plate = new TextField(isNew ? "" : existing.getPlateNumber());
-        plate.setPromptText("e.g. AA-BC-123");
-        TextField price = new TextField(isNew ? "" : existing.getDailyPrice().toPlainString());
-        price.setPromptText("e.g. 45.00");
-        ComboBox<CarStatus> status = new ComboBox<>();
-        configure(status, CarStatus::getLabel, "");
+        List<Brand> brands = brandRepository.findAllByOrderByNameAsc();
+        List<Category> categories = categoryRepository.findAllByOrderByNameAsc();
+        if (brands.isEmpty() || categories.isEmpty()) {
+            Dialogs.error("Please add at least one brand and one category first.");
+            return;
+        }
 
-        boolean currentlyRented = !isNew && existing.getStatus() == CarStatus.RENTED;
-        if (currentlyRented) {
-            status.getItems().add(CarStatus.RENTED);
-            status.setValue(CarStatus.RENTED);
-            status.setDisable(true);
+        ComboBox<Brand> brandBox = new ComboBox<>(FXCollections.observableArrayList(brands));
+        brandBox.setConverter(converter(Brand::getName));
+        ComboBox<Category> categoryBox = new ComboBox<>(FXCollections.observableArrayList(categories));
+        categoryBox.setConverter(converter(Category::getName));
+        TextField modelField = new TextField();
+        modelField.setPromptText("e.g. Corolla");
+        TextField yearField = new TextField();
+        yearField.setPromptText("e.g. 2023");
+        TextField plateField = new TextField();
+        plateField.setPromptText("e.g. AA-AD-301");
+        TextField priceField = new TextField();
+        priceField.setPromptText("e.g. 45.00");
+        ComboBox<CarStatus> statusBox = new ComboBox<>();
+        statusBox.setConverter(converter(CarStatus::getLabel));
+        TextField imageField = new TextField();
+        imageField.setPromptText("https://... (JPG or PNG link)");
+        Label statusHint = new Label();
+        statusHint.getStyleClass().add("hint");
+        statusHint.setWrapText(true);
+
+        if (hasActiveRental) {
+            statusBox.setItems(FXCollections.observableArrayList(CarStatus.RENTED));
+            statusBox.setValue(CarStatus.RENTED);
+            statusBox.setDisable(true);
+            statusHint.setText("This car is rented now. The status changes back when it is returned.");
         } else {
-            status.getItems().addAll(CarStatus.AVAILABLE, CarStatus.MAINTENANCE);
-            status.setValue(isNew ? CarStatus.AVAILABLE : existing.getStatus());
+            statusBox.setItems(FXCollections.observableArrayList(CarStatus.AVAILABLE, CarStatus.MAINTENANCE));
+            statusBox.setValue(CarStatus.AVAILABLE);
+            statusHint.setText("\"Rented\" is set automatically when a rental starts.");
         }
 
         if (!isNew) {
-            brand.getItems().stream()
-                    .filter(b -> b.getId().equals(existing.getBrand().getId()))
-                    .findFirst().ifPresent(brand::setValue);
-            category.getItems().stream()
-                    .filter(c -> c.getId().equals(existing.getCategory().getId()))
-                    .findFirst().ifPresent(category::setValue);
+            brands.stream().filter(b -> b.getId().equals(existing.getBrand().getId()))
+                    .findFirst().ifPresent(brandBox::setValue);
+            categories.stream().filter(c -> c.getId().equals(existing.getCategory().getId()))
+                    .findFirst().ifPresent(categoryBox::setValue);
+            modelField.setText(existing.getModel());
+            yearField.setText(existing.getYear() == null ? "" : String.valueOf(existing.getYear()));
+            plateField.setText(existing.getPlateNumber());
+            priceField.setText(existing.getDailyPrice() == null ? "" : String.valueOf(existing.getDailyPrice()));
+            if (!hasActiveRental && existing.getStatus() == CarStatus.MAINTENANCE) {
+                statusBox.setValue(CarStatus.MAINTENANCE);
+            }
+            imageField.setText(existing.getImageUrl() == null ? "" : existing.getImageUrl());
         }
 
-        brand.setPrefWidth(300);
-        category.setPrefWidth(300);
-        status.setPrefWidth(300);
+        GridPane form = new GridPane();
+        form.setHgap(12);
+        form.setVgap(10);
+        int row = 0;
+        form.addRow(row++, new Label("Brand"), brandBox);
+        form.addRow(row++, new Label("Model"), modelField);
+        form.addRow(row++, new Label("Year"), yearField);
+        form.addRow(row++, new Label("Category"), categoryBox);
+        form.addRow(row++, new Label("Plate number"), plateField);
+        form.addRow(row++, new Label("Daily price"), priceField);
+        form.addRow(row++, new Label("Status"), statusBox);
+        form.add(statusHint, 1, row);
+        for (Node node : List.of(brandBox, categoryBox, statusBox)) {
+            ((Region) node).setMaxWidth(Double.MAX_VALUE);
+        }
+        modelField.setPrefWidth(240);
+        statusHint.setMaxWidth(240);
 
-        GridPane grid = new GridPane();
-        grid.setHgap(12);
-        grid.setVgap(10);
-        grid.setPadding(new Insets(10, 10, 0, 10));
-        grid.addRow(0, new Label("Brand:"), brand);
-        grid.addRow(1, new Label("Category:"), category);
-        grid.addRow(2, new Label("Plate number:"), plate);
-        grid.addRow(3, new Label("Daily price:"), price);
-        grid.addRow(4, new Label("Status:"), status);
+        StackPane preview = new StackPane();
+        preview.getStyleClass().add("car-image");
+        preview.setMinSize(PREVIEW_WIDTH, PREVIEW_HEIGHT);
+        preview.setMaxSize(PREVIEW_WIDTH, PREVIEW_HEIGHT);
+        Region previewPlaceholder = Icons.of(Icons.CAR, "car-placeholder");
+        ImageView previewImage = new ImageView();
+        Label previewMessage = new Label();
+        previewMessage.getStyleClass().add("preview-message");
+        previewMessage.setMaxWidth(PREVIEW_WIDTH - 16);
+        previewMessage.visibleProperty().bind(previewMessage.textProperty().isNotEmpty());
+        StackPane.setAlignment(previewMessage, Pos.BOTTOM_CENTER);
+        StackPane.setMargin(previewMessage, new Insets(8));
+        preview.getChildren().addAll(previewPlaceholder, previewImage, previewMessage);
+        Rectangle clip = new Rectangle(PREVIEW_WIDTH, PREVIEW_HEIGHT);
+        clip.setArcWidth(20);
+        clip.setArcHeight(20);
+        preview.setClip(clip);
 
-        Label note = new Label(currentlyRented
-                ? "This car is rented. Its status changes when the car is returned (Rentals screen)."
-                : "The Rented status is set automatically when a rental is created.");
-        note.getStyleClass().add("hint");
-        note.setWrapText(true);
-        note.setMaxWidth(420);
+        Runnable updatePreview = () -> {
+            String url = ImageCache.normalize(imageField.getText());
+            previewImage.setImage(null);
+            previewPlaceholder.setVisible(true);
+            if (url == null || url.isBlank()) {
+                previewMessage.setText("No photo yet");
+                return;
+            }
+            previewMessage.setText("Loading photo...");
+            ImageCache.load(url, image -> {
+                if (!url.equals(ImageCache.normalize(imageField.getText()))) {
+                    return;
+                }
+                if (image == null) {
+                    previewMessage.setText("Could not load this link. Use a direct JPG/PNG image link.");
+                } else {
+                    showCover(previewImage, image, PREVIEW_WIDTH, PREVIEW_HEIGHT);
+                    previewPlaceholder.setVisible(false);
+                    previewMessage.setText("");
+                }
+            });
+        };
+        imageField.setOnAction(event -> updatePreview.run());
+        imageField.focusedProperty().addListener((obs, wasFocused, focused) -> {
+            if (!focused) {
+                updatePreview.run();
+            }
+        });
 
-        Label errors = new Label();
-        errors.setStyle("-fx-text-fill: #dc3545;");
-        errors.setWrapText(true);
-        errors.setMaxWidth(420);
-        VBox content = new VBox(12, grid, note, errors);
+        Button findOnline = new Button("Find image online");
+        findOnline.getStyleClass().add("secondary-button");
+        findOnline.setOnAction(event -> {
+            String brandName = brandBox.getValue() == null ? "" : brandBox.getValue().getName();
+            String query = (brandName + " " + modelField.getText() + " " + yearField.getText()).trim();
+            if (query.isEmpty()) {
+                Dialogs.error("Choose a brand and type a model first.");
+                return;
+            }
+            FxApp.openInBrowser("https://www.google.com/search?tbm=isch&q="
+                    + URLEncoder.encode(query + " car", StandardCharsets.UTF_8));
+        });
+        Button showPreview = new Button("Preview");
+        showPreview.getStyleClass().add("secondary-button");
+        showPreview.setOnAction(event -> updatePreview.run());
+        HBox imageButtons = new HBox(8, findOnline, showPreview);
+
+        Label imageLabel = new Label("Photo");
+        imageLabel.getStyleClass().add("list-title");
+        Label imageHelp = new Label("1. Click \"Find image online\".\n"
+                + "2. Open a photo, right-click it, choose \"Copy Image Address\".\n"
+                + "3. Paste the link above and click \"Preview\".");
+        imageHelp.getStyleClass().add("hint");
+        imageHelp.setWrapText(true);
+        imageHelp.setMaxWidth(PREVIEW_WIDTH);
+        imageField.setPrefWidth(PREVIEW_WIDTH);
+        VBox photoColumn = new VBox(10, imageLabel, preview, imageField, imageButtons, imageHelp);
+
+        HBox content = new HBox(28, form, photoColumn);
+        content.setPadding(new Insets(10, 4, 4, 4));
+        updatePreview.run();
 
         Dialog<ButtonType> dialog = new Dialog<>();
         dialog.setTitle(isNew ? "New car" : "Edit car");
+        dialog.setHeaderText(isNew ? "Add a new car to the fleet" : existing.getDisplayName());
         ButtonType saveType = new ButtonType("Save", ButtonBar.ButtonData.OK_DONE);
         dialog.getDialogPane().getButtonTypes().addAll(saveType, ButtonType.CANCEL);
         dialog.getDialogPane().setContent(content);
 
-        Long id = isNew ? null : existing.getId();
         Button saveButton = (Button) dialog.getDialogPane().lookupButton(saveType);
         saveButton.addEventFilter(ActionEvent.ACTION, event -> {
-            List<String> problems = validate(buildCar(id, brand, category, plate, price, status));
-            if (!problems.isEmpty()) {
-                errors.setText(String.join("\n", problems));
-                event.consume(); // keep the dialog open
+            CarForm formValues = new CarForm(brandBox.getValue(), modelField.getText(), yearField.getText(),
+                    categoryBox.getValue(), plateField.getText(), priceField.getText(),
+                    statusBox.getValue(), imageField.getText());
+            String error = save(existing, formValues);
+            if (error != null) {
+                Dialogs.error(error);
+                event.consume();
             }
         });
 
-        Optional<ButtonType> result = dialog.showAndWait();
-        if (result.isPresent() && result.get() == saveType) {
-            carRepository.save(buildCar(id, brand, category, plate, price, status).car());
-            refresh();
-        }
+        dialog.showAndWait();
+        refresh();
     }
 
-    private CarInput buildCar(Long id, ComboBox<Brand> brand, ComboBox<Category> category,
-                              TextField plate, TextField price, ComboBox<CarStatus> status) {
-        Car car = new Car();
-        car.setId(id);
-        car.setBrand(brand.getValue());
-        car.setCategory(category.getValue());
-        car.setPlateNumber(plate.getText().trim().toUpperCase());
-        car.setStatus(status.getValue());
-
-        boolean priceInvalid = false;
-        String priceText = price.getText().trim().replace(',', '.');
-        if (!priceText.isEmpty()) {
-            try {
-                car.setDailyPrice(new BigDecimal(priceText));
-            } catch (NumberFormatException e) {
-                priceInvalid = true;
-            }
-        }
-        return new CarInput(car, priceInvalid);
+    /** Values typed into the editor. */
+    private record CarForm(Brand brand, String model, String year, Category category,
+                           String plate, String price, CarStatus status, String imageUrl) {
     }
 
-    /** Same rules as the web version: annotations on Car + unique plate + Rented status rules. */
-    private List<String> validate(CarInput input) {
-        Car car = input.car();
-        List<ConstraintViolation<Car>> violations = new ArrayList<>(validator.validate(car));
-        violations.sort(Comparator.comparingInt(v -> FIELD_ORDER.indexOf(v.getPropertyPath().toString())));
-
-        List<String> problems = new ArrayList<>();
-        for (ConstraintViolation<Car> violation : violations) {
-            boolean isPriceField = "dailyPrice".equals(violation.getPropertyPath().toString());
-            if (input.priceInvalid() && isPriceField) {
-                continue;
-            }
-            problems.add("• " + violation.getMessage());
+    /** Validates and saves. Returns an error message, or null when saved. */
+    private String save(Car existing, CarForm form) {
+        String yearText = form.year() == null ? "" : form.year().trim();
+        String priceText = form.price() == null ? "" : form.price().trim().replace(',', '.');
+        if (yearText.isEmpty()) {
+            return "Year is required.";
         }
-        if (input.priceInvalid()) {
-            problems.add("• Daily price must be a number, e.g. 45.00.");
+        Integer year;
+        try {
+            year = Integer.valueOf(yearText);
+        } catch (NumberFormatException e) {
+            return "Year must be a whole number, for example 2023.";
         }
-
-        Long id = car.getId();
-        if (!car.getPlateNumber().isEmpty()) {
-            boolean plateTaken = (id == null)
-                    ? carRepository.existsByPlateNumberIgnoreCase(car.getPlateNumber())
-                    : carRepository.existsByPlateNumberIgnoreCaseAndIdNot(car.getPlateNumber(), id);
-            if (plateTaken) {
-                problems.add("• A car with this plate number already exists.");
-            }
+        if (priceText.isEmpty()) {
+            return "Daily price is required.";
+        }
+        BigDecimal price;
+        try {
+            price = new BigDecimal(priceText);
+        } catch (NumberFormatException e) {
+            return "Daily price must be a number, for example 45.00.";
         }
 
-        boolean hasActiveRental = id != null && rentalRepository.existsByCar_IdAndReturnDateIsNull(id);
-        if (hasActiveRental && car.getStatus() != CarStatus.RENTED) {
-            problems.add("• This car has an active rental. Close the rental to make it available again.");
-        } else if (!hasActiveRental && car.getStatus() == CarStatus.RENTED) {
-            problems.add("• The Rented status is set automatically when a rental is created.");
+        String plate = form.plate() == null ? "" : form.plate().trim().toUpperCase(Locale.ROOT);
+        String imageUrl = ImageCache.normalize(form.imageUrl());
+
+        Car car = existing == null ? new Car() : existing;
+        car.setBrand(form.brand());
+        car.setCategory(form.category());
+        car.setModel(form.model() == null ? "" : form.model().trim());
+        car.setYear(year);
+        car.setPlateNumber(plate);
+        car.setDailyPrice(price);
+        car.setStatus(form.status());
+        car.setImageUrl(imageUrl == null || imageUrl.isBlank() ? null : imageUrl);
+
+        Set<ConstraintViolation<Car>> violations = validator.validate(car);
+        if (!violations.isEmpty()) {
+            return violations.stream()
+                    .map(ConstraintViolation::getMessage)
+                    .sorted()
+                    .collect(Collectors.joining("\n"));
         }
-        return problems;
+        boolean plateTaken = existing == null
+                ? carRepository.existsByPlateNumberIgnoreCase(plate)
+                : carRepository.existsByPlateNumberIgnoreCaseAndIdNot(plate, existing.getId());
+        if (plateTaken) {
+            return "A car with this plate number already exists.";
+        }
+        carRepository.save(car);
+        return null;
     }
 
     private void delete(Car car) {
-        if (car == null || !Dialogs.confirm("Are you sure you want to delete car " + car.getPlateNumber() + "?")) {
+        if (!Dialogs.confirm("Are you sure you want to delete " + car.getDisplayName()
+                + " (" + car.getPlateNumber() + ")?")) {
+            return;
+        }
+        if (rentalRepository.existsByCar_IdAndReturnDateIsNull(car.getId())) {
+            Dialogs.error("This car is rented right now, so it cannot be deleted.");
             return;
         }
         try {
             carRepository.deleteById(car.getId());
-            refresh();
         } catch (DataIntegrityViolationException e) {
-            Dialogs.error("This car cannot be deleted because it has rentals.");
+            Dialogs.error("This car cannot be deleted because it has rental history.");
         }
+        refresh();
+    }
+
+    /** Fills the box like CSS "background-size: cover" (crops, never stretches). */
+    private static void showCover(ImageView view, Image image, double width, double height) {
+        double imageWidth = image.getWidth();
+        double imageHeight = image.getHeight();
+        double targetRatio = width / height;
+        Rectangle2D viewport;
+        if (imageWidth / imageHeight > targetRatio) {
+            double cropWidth = imageHeight * targetRatio;
+            viewport = new Rectangle2D((imageWidth - cropWidth) / 2, 0, cropWidth, imageHeight);
+        } else {
+            double cropHeight = imageWidth / targetRatio;
+            viewport = new Rectangle2D(0, (imageHeight - cropHeight) / 2, imageWidth, cropHeight);
+        }
+        view.setImage(image);
+        view.setViewport(viewport);
+        view.setPreserveRatio(false);
+        view.setSmooth(true);
+        view.setFitWidth(width);
+        view.setFitHeight(height);
+    }
+
+    private static Label statusBadge(CarStatus status) {
+        Label badge = new Label(status == null ? "-" : status.getLabel());
+        String style = status == null ? "badge-neutral" : switch (status) {
+            case AVAILABLE -> "badge-success";
+            case RENTED -> "badge-warning";
+            default -> "badge-neutral";
+        };
+        badge.getStyleClass().addAll("badge", style);
+        return badge;
+    }
+
+    private static <T> StringConverter<T> converter(Function<T, String> toText) {
+        return new StringConverter<>() {
+            @Override
+            public String toString(T item) {
+                return item == null ? "" : toText.apply(item);
+            }
+
+            @Override
+            public T fromString(String text) {
+                return null;
+            }
+        };
+    }
+
+    private static <T> void setupFilter(ComboBox<T> box, List<T> items, String allText, Function<T, String> toText) {
+        List<T> withAll = new ArrayList<>();
+        withAll.add(null);
+        withAll.addAll(items);
+        box.setItems(FXCollections.observableArrayList(withAll));
+        Callback<ListView<T>, ListCell<T>> factory = list -> new ListCell<>() {
+            @Override
+            protected void updateItem(T item, boolean empty) {
+                super.updateItem(item, empty);
+                setText(empty ? null : (item == null ? allText : toText.apply(item)));
+            }
+        };
+        box.setCellFactory(factory);
+        box.setButtonCell(factory.call(null));
+        box.setPromptText(allText);
+        box.getSelectionModel().selectFirst();
     }
 }

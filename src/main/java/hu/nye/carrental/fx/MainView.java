@@ -83,16 +83,7 @@ public class MainView extends BorderPane {
                 rentalView.refresh();
                 yield rentalView;
             }
-            case "Cars" -> {
-                CarView carView = new CarView(
-                        context.getBean(CarRepository.class),
-                        context.getBean(BrandRepository.class),
-                        context.getBean(CategoryRepository.class),
-                        context.getBean(RentalRepository.class),
-                        context.getBean(Validator.class));
-                carView.refresh();
-                yield carView;
-            }
+            case "Cars" -> new hu.nye.carrental.fx.view.CarView(context);
             case "Customers" -> {
                 CustomerView customerView = new CustomerView(
                         context.getBean(CustomerRepository.class), context.getBean(Validator.class));
