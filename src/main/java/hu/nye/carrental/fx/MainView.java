@@ -42,6 +42,7 @@ public class MainView extends BorderPane {
         addNavButton(sidebar, "Rentals");
         addNavButton(sidebar, "Cars");
         addNavButton(sidebar, "Customers");
+        addNavButton(sidebar, "Insurance");
         addNavButton(sidebar, "Brands");
         addNavButton(sidebar, "Categories");
 
@@ -73,16 +74,9 @@ public class MainView extends BorderPane {
         });
 
         Node view = switch (name) {
+            case "Insurance" -> new hu.nye.carrental.fx.view.InsuranceView(context);
             case "Dashboard" -> new hu.nye.carrental.fx.view.DashboardView(context, this::show);
-            case "Rentals" -> {
-                RentalView rentalView = new RentalView(
-                        context.getBean(RentalRepository.class),
-                        context.getBean(CarRepository.class),
-                        context.getBean(CustomerRepository.class),
-                        context.getBean(RentalService.class));
-                rentalView.refresh();
-                yield rentalView;
-            }
+            case "Rentals" -> new hu.nye.carrental.fx.view.RentalView(context);
             case "Cars" -> new hu.nye.carrental.fx.view.CarView(context);
             case "Customers" -> {
                 CustomerView customerView = new CustomerView(

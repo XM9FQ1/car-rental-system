@@ -1,21 +1,26 @@
 package hu.nye.carrental.fx.view;
 
 import hu.nye.carrental.fx.Dialogs;
+import hu.nye.carrental.fx.Icons;
+import hu.nye.carrental.fx.ImageCache;
 import hu.nye.carrental.model.Car;
 import hu.nye.carrental.model.CarStatus;
 import hu.nye.carrental.model.Customer;
+import hu.nye.carrental.model.InsurancePlan;
 import hu.nye.carrental.model.Rental;
 import hu.nye.carrental.repository.CarRepository;
 import hu.nye.carrental.repository.CustomerRepository;
+import hu.nye.carrental.repository.InsurancePlanRepository;
 import hu.nye.carrental.repository.RentalRepository;
-import hu.nye.carrental.service.RentalException;
 import hu.nye.carrental.service.RentalService;
-import javafx.beans.binding.Bindings;
+import javafx.beans.property.ReadOnlyObjectWrapper;
 import javafx.beans.property.SimpleStringProperty;
 import javafx.collections.FXCollections;
 import javafx.event.ActionEvent;
 import javafx.geometry.Insets;
 import javafx.geometry.Pos;
+import javafx.geometry.Rectangle2D;
+import javafx.scene.Node;
 import javafx.scene.control.Button;
 import javafx.scene.control.ButtonBar;
 import javafx.scene.control.ButtonType;
@@ -28,371 +33,613 @@ import javafx.scene.control.TableCell;
 import javafx.scene.control.TableColumn;
 import javafx.scene.control.TableRow;
 import javafx.scene.control.TableView;
+import javafx.scene.control.TextField;
 import javafx.scene.control.ToggleButton;
 import javafx.scene.control.ToggleGroup;
+import javafx.scene.image.Image;
+import javafx.scene.image.ImageView;
 import javafx.scene.layout.GridPane;
 import javafx.scene.layout.HBox;
 import javafx.scene.layout.Priority;
 import javafx.scene.layout.Region;
+import javafx.scene.layout.StackPane;
 import javafx.scene.layout.VBox;
+import javafx.scene.shape.Rectangle;
+import javafx.util.StringConverter;
+import org.springframework.context.ApplicationContext;
 
 import java.math.BigDecimal;
+import java.text.DecimalFormat;
 import java.time.LocalDate;
+import java.time.format.DateTimeFormatter;
 import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.List;
 import java.util.Locale;
-import java.util.Optional;
 import java.util.function.Function;
 
-/** Rentals screen (JavaFX): list, create a rental, return a car. */
+/**
+ * Rentals screen (JavaFX): table with filters, new rental with insurance choice
+ * and a live price breakdown, and returning a car.
+ */
 public class RentalView extends VBox {
+
+    private static final DecimalFormat MONEY = new DecimalFormat("#,##0.00");
+    private static final DateTimeFormatter DATE = DateTimeFormatter.ofPattern("d MMM yyyy", Locale.ENGLISH);
 
     private final RentalRepository rentalRepository;
     private final CarRepository carRepository;
     private final CustomerRepository customerRepository;
+    private final InsurancePlanRepository insuranceRepository;
     private final RentalService rentalService;
 
     private final TableView<Rental> table = new TableView<>();
-    private final ToggleGroup showGroup = new ToggleGroup();
-    private final ToggleButton allButton = new ToggleButton("All");
-    private final ToggleButton activeButton = new ToggleButton("Active");
-    private final ToggleButton closedButton = new ToggleButton("Closed");
+    private final TextField searchField = new TextField();
+    private final ToggleGroup filterGroup = new ToggleGroup();
+    private final Label countLabel = new Label();
+    private List<Rental> allRentals = new ArrayList<>();
 
-    public RentalView(RentalRepository rentalRepository, CarRepository carRepository,
-                      CustomerRepository customerRepository, RentalService rentalService) {
-        this.rentalRepository = rentalRepository;
-        this.carRepository = carRepository;
-        this.customerRepository = customerRepository;
-        this.rentalService = rentalService;
+    public RentalView(ApplicationContext context) {
+        this.rentalRepository = context.getBean(RentalRepository.class);
+        this.carRepository = context.getBean(CarRepository.class);
+        this.customerRepository = context.getBean(CustomerRepository.class);
+        this.insuranceRepository = context.getBean(InsurancePlanRepository.class);
+        this.rentalService = context.getBean(RentalService.class);
+
         getStyleClass().add("page");
 
-        Label heading = new Label("Rentals");
-        heading.getStyleClass().add("page-title");
-        Region spacer = new Region();
-        HBox.setHgrow(spacer, Priority.ALWAYS);
-        Button addButton = new Button("+ New rental");
-        addButton.getStyleClass().add("primary-button");
-        addButton.setOnAction(event -> openNewRentalDialog());
-        HBox header = new HBox(12, heading, spacer, addButton);
+        Label title = new Label("Rentals");
+        title.getStyleClass().add("page-title");
+        Label subtitle = new Label("Start a rental with insurance, and return cars. Double-click an active rental to return it.");
+        subtitle.getStyleClass().add("page-subtitle");
+        VBox titles = new VBox(2, title, subtitle);
+        Region headerSpacer = new Region();
+        HBox.setHgrow(headerSpacer, Priority.ALWAYS);
+        Button newButton = new Button("+ New rental");
+        newButton.getStyleClass().add("primary-button");
+        newButton.setOnAction(event -> openNewRental());
+        HBox header = new HBox(12, titles, headerSpacer, newButton);
         header.setAlignment(Pos.CENTER_LEFT);
 
-        allButton.setToggleGroup(showGroup);
-        activeButton.setToggleGroup(showGroup);
-        closedButton.setToggleGroup(showGroup);
-        allButton.setSelected(true);
-        showGroup.selectedToggleProperty().addListener((observable, oldToggle, newToggle) -> {
+        HBox toggles = new HBox(6);
+        for (String name : List.of("All", "Active", "Overdue", "Closed")) {
+            ToggleButton toggle = new ToggleButton(name);
+            toggle.setUserData(name);
+            toggle.setToggleGroup(filterGroup);
+            toggles.getChildren().add(toggle);
+        }
+        filterGroup.selectToggle(filterGroup.getToggles().get(0));
+        filterGroup.selectedToggleProperty().addListener((obs, oldToggle, newToggle) -> {
             if (newToggle == null) {
-                oldToggle.setSelected(true); // one button must always stay selected
-                return;
+                filterGroup.selectToggle(oldToggle);
+            } else {
+                applyFilters();
             }
-            refresh();
         });
-        HBox toggles = new HBox(0, allButton, activeButton, closedButton);
+        searchField.setPromptText("Search customer, car or plate");
+        searchField.setPrefWidth(260);
+        searchField.textProperty().addListener((obs, oldText, newText) -> applyFilters());
+        Region filterSpacer = new Region();
+        HBox.setHgrow(filterSpacer, Priority.ALWAYS);
+        countLabel.getStyleClass().add("hint");
+        HBox filters = new HBox(12, toggles, searchField, filterSpacer, countLabel);
+        filters.setAlignment(Pos.CENTER_LEFT);
 
-        TableColumn<Rental, String> priceColumn = textColumn("Price", rental -> rental.isActive()
-                ? money(rental.getEstimatedPrice()) + " (est.)"
-                : money(rental.getTotalPrice()), 130);
-        priceColumn.setStyle("-fx-alignment: CENTER-RIGHT;");
+        buildTable();
+        VBox.setVgrow(table, Priority.ALWAYS);
 
-        TableColumn<Rental, String> statusColumn = new TableColumn<>("Status");
-        statusColumn.setCellValueFactory(cell -> new SimpleStringProperty(statusOf(cell.getValue())));
+        Button returnButton = new Button("Return car");
+        returnButton.getStyleClass().add("secondary-button");
+        returnButton.disableProperty().bind(table.getSelectionModel().selectedItemProperty().isNull());
+        returnButton.setOnAction(event -> openReturn(table.getSelectionModel().getSelectedItem()));
+        Label hint = new Label("Select an active rental, then click \"Return car\".");
+        hint.getStyleClass().add("hint");
+        HBox actions = new HBox(10, returnButton, hint);
+        actions.setAlignment(Pos.CENTER_LEFT);
+
+        getChildren().addAll(header, filters, table, actions);
+        refresh();
+    }
+
+    /** Reloads the rentals from the database. */
+    public void refresh() {
+        allRentals = new ArrayList<>();
+        for (Rental rental : rentalRepository.findAllWithDetails()) {
+            allRentals.add(rental);
+        }
+        allRentals.sort(Comparator.comparing(Rental::isActive).reversed()
+                .thenComparing(Rental::getStartDate, Comparator.nullsLast(Comparator.reverseOrder())));
+        applyFilters();
+    }
+
+    private void applyFilters() {
+        String filter = filterGroup.getSelectedToggle() == null
+                ? "All" : String.valueOf(filterGroup.getSelectedToggle().getUserData());
+        String text = searchField.getText() == null ? "" : searchField.getText().trim().toLowerCase(Locale.ROOT);
+
+        List<Rental> visible = allRentals.stream()
+                .filter(rental -> switch (filter) {
+                    case "Active" -> rental.isActive();
+                    case "Overdue" -> rental.isActive() && rental.isOverdue();
+                    case "Closed" -> !rental.isActive();
+                    default -> true;
+                })
+                .filter(rental -> text.isEmpty()
+                        || (rental.getCustomer().getFullName() + " " + rental.getCar().getDisplayName()
+                        + " " + rental.getCar().getPlateNumber()).toLowerCase(Locale.ROOT).contains(text))
+                .toList();
+        table.setItems(FXCollections.observableArrayList(visible));
+        countLabel.setText(visible.size() + " of " + allRentals.size() + " rentals");
+    }
+
+    private void buildTable() {
+        TableColumn<Rental, Rental> photoColumn = new TableColumn<>("");
+        photoColumn.setCellValueFactory(cell -> new ReadOnlyObjectWrapper<>(cell.getValue()));
+        photoColumn.setCellFactory(column -> new TableCell<>() {
+            private final ImageView view = new ImageView();
+            private final StackPane box = new StackPane(view);
+            private String loadedUrl;
+
+            {
+                box.setMinSize(64, 40);
+                box.setMaxSize(64, 40);
+                box.getStyleClass().add("car-image");
+                Rectangle clip = new Rectangle(64, 40);
+                clip.setArcWidth(10);
+                clip.setArcHeight(10);
+                box.setClip(clip);
+            }
+
+            @Override
+            protected void updateItem(Rental rental, boolean empty) {
+                super.updateItem(rental, empty);
+                if (empty || rental == null) {
+                    setGraphic(null);
+                    loadedUrl = null;
+                    return;
+                }
+                String url = rental.getCar().getImageUrl();
+                if (url == null || !url.equals(loadedUrl)) {
+                    view.setImage(null);
+                    loadedUrl = url;
+                    ImageCache.load(url, image -> {
+                        if (image != null && url.equals(loadedUrl)) {
+                            showCover(view, image, 64, 40);
+                        }
+                    });
+                }
+                setGraphic(box);
+            }
+        });
+        photoColumn.setPrefWidth(80);
+        photoColumn.setMinWidth(80);
+        photoColumn.setMaxWidth(80);
+        photoColumn.setSortable(false);
+
+        table.getColumns().add(photoColumn);
+        table.getColumns().add(textColumn("Car", 170, r -> r.getCar().getDisplayName() + "\n" + r.getCar().getPlateNumber()));
+        table.getColumns().add(textColumn("Customer", 140, r -> r.getCustomer().getFullName()));
+        table.getColumns().add(textColumn("Start", 95, r -> format(r.getStartDate())));
+        table.getColumns().add(textColumn("Planned end", 95, r -> format(r.getPlannedEndDate())));
+        table.getColumns().add(textColumn("Returned", 95, r -> format(r.getReturnDate())));
+        table.getColumns().add(textColumn("Insurance", 95, Rental::getInsuranceName));
+        table.getColumns().add(textColumn("Daily rate", 85, r -> money(dailyRate(r))));
+        table.getColumns().add(textColumn("Total", 105, r -> r.isActive()
+                ? money(toDecimal(r.getEstimatedPrice())) + " (est.)"
+                : money(toDecimal(r.getTotalPrice()))));
+
+        TableColumn<Rental, Rental> statusColumn = new TableColumn<>("Status");
+        statusColumn.setCellValueFactory(cell -> new ReadOnlyObjectWrapper<>(cell.getValue()));
         statusColumn.setCellFactory(column -> new TableCell<>() {
             @Override
-            protected void updateItem(String status, boolean empty) {
-                super.updateItem(status, empty);
-                setText(null);
-                if (empty || status == null) {
+            protected void updateItem(Rental rental, boolean empty) {
+                super.updateItem(rental, empty);
+                if (empty || rental == null) {
                     setGraphic(null);
                     return;
                 }
-                Label badge = new Label(status);
-                badge.setStyle(badgeStyle(status));
+                Label badge;
+                if (!rental.isActive()) {
+                    badge = badge("Closed", "badge-neutral");
+                } else if (rental.isOverdue()) {
+                    badge = badge("Overdue", "badge-danger");
+                } else {
+                    badge = badge("Active", "badge-info");
+                }
                 setGraphic(badge);
             }
         });
-        statusColumn.setPrefWidth(100);
-
-        table.getColumns().add(textColumn("#", rental -> String.valueOf(rental.getId()), 50));
-        table.getColumns().add(textColumn("Car", rental -> rental.getCar().getPlateNumber() + "  ("
-                + rental.getCar().getBrand().getName() + " · " + rental.getCar().getCategory().getName() + ")", 260));
-        table.getColumns().add(textColumn("Customer", rental -> rental.getCustomer().getFullName(), 170));
-        table.getColumns().add(textColumn("Start", rental -> rental.getStartDate().toString(), 100));
-        table.getColumns().add(textColumn("Planned return", rental -> rental.getPlannedEndDate().toString(), 120));
-        table.getColumns().add(textColumn("Returned",
-                rental -> rental.getReturnDate() == null ? "-" : rental.getReturnDate().toString(), 100));
-        table.getColumns().add(priceColumn);
+        statusColumn.setPrefWidth(90);
         table.getColumns().add(statusColumn);
+
         table.setColumnResizePolicy(TableView.CONSTRAINED_RESIZE_POLICY_FLEX_LAST_COLUMN);
-        table.setPlaceholder(new Label("No rentals found."));
+        table.setFixedCellSize(56);
+        table.setPlaceholder(new Label("No rentals match the filter."));
         table.setRowFactory(tableView -> {
             TableRow<Rental> row = new TableRow<>();
             row.setOnMouseClicked(event -> {
-                if (event.getClickCount() == 2 && row.getItem() != null && row.getItem().isActive()) {
-                    openReturnDialog(row.getItem());
+                if (event.getClickCount() == 2 && row.getItem() != null) {
+                    openReturn(row.getItem());
                 }
             });
             return row;
         });
-        VBox.setVgrow(table, Priority.ALWAYS);
-
-        Button returnButton = new Button("Return car");
-        returnButton.setStyle("-fx-background-color: #198754; -fx-text-fill: white; "
-                + "-fx-background-radius: 6; -fx-padding: 6 14 6 14; -fx-cursor: hand;");
-        returnButton.disableProperty().bind(Bindings.createBooleanBinding(() -> {
-            Rental selected = table.getSelectionModel().getSelectedItem();
-            return selected == null || !selected.isActive();
-        }, table.getSelectionModel().selectedItemProperty()));
-        returnButton.setOnAction(event -> openReturnDialog(table.getSelectionModel().getSelectedItem()));
-
-        Label hint = new Label("Tip: double-click an active rental to return the car.");
-        hint.getStyleClass().add("hint");
-        HBox actions = new HBox(8, returnButton, hint);
-        actions.setAlignment(Pos.CENTER_LEFT);
-
-        getChildren().addAll(header, toggles, table, actions);
     }
 
-    /** Reloads the table for the selected button (All / Active / Closed). */
-    public void refresh() {
-        List<Rental> rentals;
-        if (activeButton.isSelected()) {
-            rentals = rentalRepository.findActiveWithDetails();
-        } else if (closedButton.isSelected()) {
-            rentals = rentalRepository.findClosedWithDetails();
-        } else {
-            rentals = rentalRepository.findAllWithDetails();
-        }
-        table.setItems(FXCollections.observableArrayList(rentals));
-    }
-
-    // ------------------------------------------------------------------ new rental
-
-    private void openNewRentalDialog() {
-        List<Car> cars = carRepository.search(null, null, CarStatus.AVAILABLE);
-        List<Customer> customers = customerRepository.findAllByOrderByLastNameAscFirstNameAsc();
-        if (cars.isEmpty()) {
-            Dialogs.info("There are no available cars right now.");
-            return;
-        }
-        if (customers.isEmpty()) {
-            Dialogs.info("There are no customers yet. Add a customer first.");
-            return;
-        }
-
-        ComboBox<Car> car = new ComboBox<>(FXCollections.observableArrayList(cars));
-        configure(car, c -> c.getPlateNumber() + " - " + c.getBrand().getName() + " "
-                + c.getCategory().getName() + " (" + money(c.getDailyPrice()) + " / day)", "-- Select car --");
-        ComboBox<Customer> customer = new ComboBox<>(FXCollections.observableArrayList(customers));
-        configure(customer, c -> c.getFullName() + " (" + c.getEmail() + ")", "-- Select customer --");
-        DatePicker startDate = new DatePicker(LocalDate.now());
-        DatePicker plannedEndDate = new DatePicker(LocalDate.now().plusDays(1));
-        car.setPrefWidth(360);
-        customer.setPrefWidth(360);
-
-        Label estimate = new Label();
-        estimate.setStyle("-fx-font-weight: bold;");
-        Runnable updateEstimate = () -> {
-            Car selectedCar = car.getValue();
-            LocalDate start = startDate.getValue();
-            LocalDate end = plannedEndDate.getValue();
-            if (selectedCar == null || start == null || end == null || end.isBefore(start)) {
-                estimate.setText("");
-                return;
-            }
-            long days = Math.max(1, ChronoUnit.DAYS.between(start, end));
-            BigDecimal price = selectedCar.getDailyPrice().multiply(BigDecimal.valueOf(days));
-            estimate.setText("Estimated price: " + money(price) + " (" + days + " day" + (days == 1 ? "" : "s") + ")");
-        };
-        car.valueProperty().addListener((obs, oldValue, newValue) -> updateEstimate.run());
-        startDate.valueProperty().addListener((obs, oldValue, newValue) -> updateEstimate.run());
-        plannedEndDate.valueProperty().addListener((obs, oldValue, newValue) -> updateEstimate.run());
-
-        GridPane grid = new GridPane();
-        grid.setHgap(12);
-        grid.setVgap(10);
-        grid.setPadding(new Insets(10, 10, 0, 10));
-        grid.addRow(0, new Label("Car:"), car);
-        grid.addRow(1, new Label("Customer:"), customer);
-        grid.addRow(2, new Label("Start date:"), startDate);
-        grid.addRow(3, new Label("Planned return:"), plannedEndDate);
-
-        Label note = new Label("Only available cars are listed.");
-        note.getStyleClass().add("hint");
-        Label errors = new Label();
-        errors.setStyle("-fx-text-fill: #dc3545;");
-        errors.setWrapText(true);
-        errors.setMaxWidth(460);
-        VBox content = new VBox(12, grid, estimate, note, errors);
-
-        Dialog<ButtonType> dialog = new Dialog<>();
-        dialog.setTitle("New rental");
-        ButtonType createType = new ButtonType("Create rental", ButtonBar.ButtonData.OK_DONE);
-        dialog.getDialogPane().getButtonTypes().addAll(createType, ButtonType.CANCEL);
-        dialog.getDialogPane().setContent(content);
-
-        Rental[] created = new Rental[1];
-        Button createButton = (Button) dialog.getDialogPane().lookupButton(createType);
-        createButton.addEventFilter(ActionEvent.ACTION, event -> {
-            List<String> problems = new ArrayList<>();
-            if (car.getValue() == null) {
-                problems.add("• Please select a car.");
-            }
-            if (customer.getValue() == null) {
-                problems.add("• Please select a customer.");
-            }
-            if (startDate.getValue() == null) {
-                problems.add("• Start date is required.");
-            }
-            if (plannedEndDate.getValue() == null) {
-                problems.add("• Planned return date is required.");
-            }
-            if (startDate.getValue() != null && plannedEndDate.getValue() != null
-                    && plannedEndDate.getValue().isBefore(startDate.getValue())) {
-                problems.add("• Planned return date cannot be before the start date.");
-            }
-            if (problems.isEmpty()) {
-                try {
-                    created[0] = rentalService.createRental(car.getValue().getId(), customer.getValue().getId(),
-                            startDate.getValue(), plannedEndDate.getValue());
-                } catch (RentalException e) {
-                    problems.add("• " + e.getMessage());
-                }
-            }
-            if (!problems.isEmpty()) {
-                errors.setText(String.join("\n", problems));
-                event.consume(); // keep the dialog open
-            }
-        });
-
-        dialog.showAndWait();
-        if (created[0] != null) {
-            refresh();
-            Dialogs.info("Rental created: " + created[0].getCar().getPlateNumber()
-                    + " is now rented to " + created[0].getCustomer().getFullName() + ".");
-        }
-    }
-
-    // ------------------------------------------------------------------ return car
-
-    private void openReturnDialog(Rental rental) {
-        if (rental == null || !rental.isActive()) {
-            return;
-        }
-
-        GridPane details = new GridPane();
-        details.setHgap(16);
-        details.setVgap(8);
-        details.setPadding(new Insets(10, 10, 0, 10));
-        details.addRow(0, bold("Car:"), new Label(rental.getCar().getPlateNumber() + " - "
-                + rental.getCar().getBrand().getName() + " " + rental.getCar().getCategory().getName()));
-        details.addRow(1, bold("Customer:"), new Label(rental.getCustomer().getFullName()));
-        details.addRow(2, bold("Start date:"), new Label(rental.getStartDate().toString()));
-        details.addRow(3, bold("Planned return:"), new Label(rental.getPlannedEndDate().toString()));
-        details.addRow(4, bold("Daily price:"), new Label(money(rental.getDailyPrice())));
-
-        DatePicker returnDate = new DatePicker(LocalDate.now());
-        HBox dateRow = new HBox(12, bold("Return date:"), returnDate);
-        dateRow.setAlignment(Pos.CENTER_LEFT);
-        dateRow.setPadding(new Insets(0, 10, 0, 10));
-
-        Label total = new Label();
-        total.setStyle("-fx-font-size: 15px; -fx-font-weight: bold;");
-        total.setPadding(new Insets(0, 10, 0, 10));
-        Runnable updateTotal = () -> {
-            LocalDate date = returnDate.getValue();
-            if (date == null || date.isBefore(rental.getStartDate())) {
-                total.setText("Total price: -");
-                return;
-            }
-            long days = Math.max(1, ChronoUnit.DAYS.between(rental.getStartDate(), date));
-            total.setText("Total price: " + money(rental.calculatePrice(date))
-                    + " (" + days + " day" + (days == 1 ? "" : "s") + " × " + money(rental.getDailyPrice()) + ")");
-        };
-        returnDate.valueProperty().addListener((obs, oldValue, newValue) -> updateTotal.run());
-        updateTotal.run();
-
-        Label errors = new Label();
-        errors.setStyle("-fx-text-fill: #dc3545;");
-        errors.setWrapText(true);
-        errors.setMaxWidth(460);
-        errors.setPadding(new Insets(0, 10, 0, 10));
-        VBox content = new VBox(14, details, dateRow, total, errors);
-
-        Dialog<ButtonType> dialog = new Dialog<>();
-        dialog.setTitle("Return car");
-        ButtonType confirmType = new ButtonType("Confirm return", ButtonBar.ButtonData.OK_DONE);
-        dialog.getDialogPane().getButtonTypes().addAll(confirmType, ButtonType.CANCEL);
-        dialog.getDialogPane().setContent(content);
-
-        Rental[] returned = new Rental[1];
-        Button confirmButton = (Button) dialog.getDialogPane().lookupButton(confirmType);
-        confirmButton.addEventFilter(ActionEvent.ACTION, event -> {
-            try {
-                returned[0] = rentalService.returnCar(rental.getId(), returnDate.getValue());
-            } catch (RentalException e) {
-                errors.setText("• " + e.getMessage());
-                event.consume(); // keep the dialog open
-            }
-        });
-
-        dialog.showAndWait();
-        if (returned[0] != null) {
-            refresh();
-            Dialogs.info("Car " + returned[0].getCar().getPlateNumber() + " returned. Total price: "
-                    + money(returned[0].getTotalPrice()));
-        }
-    }
-
-    // ------------------------------------------------------------------ helpers
-
-    private TableColumn<Rental, String> textColumn(String title, Function<Rental, String> getter, double width) {
+    private static TableColumn<Rental, String> textColumn(String title, double width, Function<Rental, String> value) {
         TableColumn<Rental, String> column = new TableColumn<>(title);
-        column.setCellValueFactory(cell -> new SimpleStringProperty(getter.apply(cell.getValue())));
+        column.setCellValueFactory(cell -> new SimpleStringProperty(value.apply(cell.getValue())));
         column.setPrefWidth(width);
         return column;
     }
 
-    private static String statusOf(Rental rental) {
-        if (rental.isOverdue()) {
-            return "Overdue";
+    // ------------------------------------------------------------------ new rental
+
+    private void openNewRental() {
+        List<Customer> customers = customerRepository.findAllByOrderByLastNameAscFirstNameAsc();
+        List<Car> cars = new ArrayList<>();
+        for (Car car : carRepository.search(null, null, null)) {
+            if (car.getStatus() == CarStatus.AVAILABLE) {
+                cars.add(car);
+            }
         }
-        return rental.isActive() ? "Active" : "Closed";
+        List<InsurancePlan> plans = insuranceRepository.findAllByOrderByDailyPriceAscNameAsc();
+        if (customers.isEmpty()) {
+            Dialogs.error("There are no customers yet. Add a customer first.");
+            return;
+        }
+        if (cars.isEmpty()) {
+            Dialogs.error("There is no available car right now.");
+            return;
+        }
+
+        ComboBox<Customer> customerBox = new ComboBox<>(FXCollections.observableArrayList(customers));
+        customerBox.setConverter(converter(Customer::getFullName));
+        customerBox.setPromptText("Choose a customer");
+        customerBox.setMaxWidth(Double.MAX_VALUE);
+
+        ComboBox<Car> carBox = new ComboBox<>(FXCollections.observableArrayList(cars));
+        carBox.setConverter(converter(car -> car.getDisplayName() + "  ·  " + car.getPlateNumber()
+                + "  ·  " + money(toDecimal(car.getDailyPrice())) + " / day"));
+        carBox.setCellFactory(list -> new ListCell<>() {
+            @Override
+            protected void updateItem(Car car, boolean empty) {
+                super.updateItem(car, empty);
+                if (empty || car == null) {
+                    setText(null);
+                    return;
+                }
+                setText(car.getDisplayName() + "  ·  " + car.getCategory().getName() + "  ·  "
+                        + car.getPlateNumber() + "  ·  " + money(toDecimal(car.getDailyPrice())) + " / day");
+            }
+        });
+        carBox.setPromptText("Choose an available car");
+        carBox.setMaxWidth(Double.MAX_VALUE);
+
+        DatePicker startPicker = new DatePicker(LocalDate.now());
+        DatePicker endPicker = new DatePicker(LocalDate.now().plusDays(3));
+
+        StackPane carPhoto = new StackPane();
+        carPhoto.getStyleClass().add("car-image");
+        carPhoto.setMinSize(300, 170);
+        carPhoto.setMaxSize(300, 170);
+        Region photoPlaceholder = Icons.of(Icons.CAR, "car-placeholder");
+        ImageView photoView = new ImageView();
+        carPhoto.getChildren().addAll(photoPlaceholder, photoView);
+        Rectangle clip = new Rectangle(300, 170);
+        clip.setArcWidth(20);
+        clip.setArcHeight(20);
+        carPhoto.setClip(clip);
+
+        GridPane form = new GridPane();
+        form.setHgap(12);
+        form.setVgap(10);
+        form.addRow(0, new Label("Customer"), customerBox);
+        form.addRow(1, new Label("Car"), carBox);
+        form.addRow(2, new Label("Start date"), startPicker);
+        form.addRow(3, new Label("Planned end"), endPicker);
+        customerBox.setPrefWidth(300);
+        carBox.setPrefWidth(300);
+        VBox left = new VBox(14, carPhoto, form);
+
+        Label insuranceTitle = new Label("Insurance");
+        insuranceTitle.getStyleClass().add("list-title");
+        Label insuranceHint = new Label("Choose the protection level. The deductible is what the customer pays in case of damage.");
+        insuranceHint.getStyleClass().add("hint");
+        insuranceHint.setWrapText(true);
+        insuranceHint.setMaxWidth(360);
+        ToggleGroup planGroup = new ToggleGroup();
+        VBox planBox = new VBox(8);
+        for (InsurancePlan plan : plans) {
+            ToggleButton option = new ToggleButton();
+            option.setUserData(plan);
+            option.setToggleGroup(planGroup);
+            option.getStyleClass().add("plan-option");
+            option.setMaxWidth(Double.MAX_VALUE);
+            option.setPrefWidth(360);
+            option.setGraphic(planSummary(plan));
+            planBox.getChildren().add(option);
+        }
+        if (!planGroup.getToggles().isEmpty()) {
+            planGroup.selectToggle(planGroup.getToggles().get(0));
+        }
+        planGroup.selectedToggleProperty().addListener((obs, oldToggle, newToggle) -> {
+            if (newToggle == null && oldToggle != null) {
+                planGroup.selectToggle(oldToggle);
+            }
+        });
+
+        Label carLine = new Label();
+        Label insuranceLine = new Label();
+        Label totalLine = new Label();
+        totalLine.getStyleClass().add("total-line");
+        Label daysLine = new Label();
+        daysLine.getStyleClass().add("hint");
+        VBox breakdown = new VBox(6, styled(new Label("Price breakdown"), "list-title"),
+                carLine, insuranceLine, styled(new Region(), "divider"), totalLine, daysLine);
+        breakdown.getStyleClass().add("breakdown");
+
+        VBox right = new VBox(10, insuranceTitle, insuranceHint, planBox, breakdown);
+
+        Runnable update = () -> {
+            Car car = carBox.getValue();
+            InsurancePlan plan = planGroup.getSelectedToggle() == null
+                    ? null : (InsurancePlan) planGroup.getSelectedToggle().getUserData();
+            long days = days(startPicker.getValue(), endPicker.getValue());
+            BigDecimal carDaily = car == null ? BigDecimal.ZERO : toDecimal(car.getDailyPrice());
+            BigDecimal insuranceDaily = plan == null ? BigDecimal.ZERO : toDecimal(plan.getDailyPrice());
+            BigDecimal carTotal = carDaily.multiply(BigDecimal.valueOf(days));
+            BigDecimal insuranceTotal = insuranceDaily.multiply(BigDecimal.valueOf(days));
+            carLine.setText("Car:  " + money(carDaily) + " × " + days + " days = " + money(carTotal));
+            insuranceLine.setText("Insurance" + (plan == null ? "" : " (" + plan.getName() + ")") + ":  "
+                    + money(insuranceDaily) + " × " + days + " days = " + money(insuranceTotal));
+            totalLine.setText("Estimated total:  " + money(carTotal.add(insuranceTotal)));
+            daysLine.setText(days + (days == 1 ? " day" : " days")
+                    + " (the final price is calculated when the car is returned)");
+
+            photoView.setImage(null);
+            photoPlaceholder.setVisible(true);
+            if (car != null) {
+                String url = car.getImageUrl();
+                ImageCache.load(url, image -> {
+                    if (image != null && carBox.getValue() == car) {
+                        showCover(photoView, image, 300, 170);
+                        photoPlaceholder.setVisible(false);
+                    }
+                });
+            }
+        };
+        carBox.valueProperty().addListener((obs, oldValue, newValue) -> update.run());
+        startPicker.valueProperty().addListener((obs, oldValue, newValue) -> update.run());
+        endPicker.valueProperty().addListener((obs, oldValue, newValue) -> update.run());
+        planGroup.selectedToggleProperty().addListener((obs, oldValue, newValue) -> update.run());
+        update.run();
+
+        HBox content = new HBox(28, left, right);
+        content.setPadding(new Insets(10, 4, 4, 4));
+
+        Dialog<ButtonType> dialog = new Dialog<>();
+        dialog.setTitle("New rental");
+        dialog.setHeaderText("Start a new rental");
+        ButtonType startType = new ButtonType("Start rental", ButtonBar.ButtonData.OK_DONE);
+        dialog.getDialogPane().getButtonTypes().addAll(startType, ButtonType.CANCEL);
+        dialog.getDialogPane().setContent(content);
+
+        Button startButton = (Button) dialog.getDialogPane().lookupButton(startType);
+        startButton.addEventFilter(ActionEvent.ACTION, event -> {
+            String error = null;
+            if (customerBox.getValue() == null) {
+                error = "Please choose a customer.";
+            } else if (carBox.getValue() == null) {
+                error = "Please choose a car.";
+            } else if (startPicker.getValue() == null || endPicker.getValue() == null) {
+                error = "Please choose the start and the planned end date.";
+            } else if (endPicker.getValue().isBefore(startPicker.getValue())) {
+                error = "The planned end date cannot be before the start date.";
+            }
+            if (error == null) {
+                InsurancePlan plan = planGroup.getSelectedToggle() == null
+                        ? null : (InsurancePlan) planGroup.getSelectedToggle().getUserData();
+                try {
+                    rentalService.createRental(carBox.getValue().getId(), customerBox.getValue().getId(),
+                            startPicker.getValue(), endPicker.getValue(), plan == null ? null : plan.getId());
+                } catch (RuntimeException e) {
+                    error = e.getMessage() == null ? "The rental could not be created." : e.getMessage();
+                }
+            }
+            if (error != null) {
+                Dialogs.error(error);
+                event.consume();
+            }
+        });
+
+        dialog.showAndWait();
+        refresh();
     }
 
-    private static String badgeStyle(String status) {
-        String colors = switch (status) {
-            case "Overdue" -> "-fx-background-color: #dc3545; -fx-text-fill: white;";
-            case "Active" -> "-fx-background-color: #0d6efd; -fx-text-fill: white;";
-            default -> "-fx-background-color: #6c757d; -fx-text-fill: white;";
+    private Node planSummary(InsurancePlan plan) {
+        Label name = new Label(plan.getName());
+        name.getStyleClass().add("plan-name");
+        Region spacer = new Region();
+        HBox.setHgrow(spacer, Priority.ALWAYS);
+        BigDecimal daily = toDecimal(plan.getDailyPrice());
+        Label price = new Label(daily.signum() == 0 ? "Included" : "+ " + money(daily) + " / day");
+        price.getStyleClass().add("plan-price");
+        HBox top = new HBox(8, name, spacer, price);
+        top.setAlignment(Pos.CENTER_LEFT);
+
+        BigDecimal deductible = toDecimal(plan.getDeductible());
+        Label deductibleLabel = deductible.signum() == 0
+                ? badge("No deductible", "badge-success")
+                : badge("Deductible: " + money(deductible), "badge-warning");
+
+        Label description = new Label(plan.getDescription() == null ? "" : plan.getDescription());
+        description.getStyleClass().add("hint");
+        description.setWrapText(true);
+        description.setMaxWidth(320);
+
+        VBox box = new VBox(6, top, deductibleLabel, description);
+        box.setAlignment(Pos.TOP_LEFT);
+        box.setPrefWidth(330);
+        return box;
+    }
+
+    // ------------------------------------------------------------------ return
+
+    private void openReturn(Rental rental) {
+        if (rental == null) {
+            return;
+        }
+        if (!rental.isActive()) {
+            Dialogs.info("This rental is already closed (returned on " + format(rental.getReturnDate()) + ").");
+            return;
+        }
+
+        DatePicker returnPicker = new DatePicker(LocalDate.now());
+        Label carLine = new Label();
+        Label insuranceLine = new Label();
+        Label totalLine = new Label();
+        totalLine.getStyleClass().add("total-line");
+        Label lateLine = new Label();
+        lateLine.getStyleClass().add("hint");
+
+        Runnable update = () -> {
+            long days = days(rental.getStartDate(), returnPicker.getValue());
+            BigDecimal carDaily = toDecimal(rental.getDailyPrice());
+            BigDecimal insuranceDaily = toDecimal(rental.getInsuranceDailyPriceOrZero());
+            BigDecimal carTotal = carDaily.multiply(BigDecimal.valueOf(days));
+            BigDecimal insuranceTotal = insuranceDaily.multiply(BigDecimal.valueOf(days));
+            carLine.setText("Car:  " + money(carDaily) + " × " + days + " days = " + money(carTotal));
+            insuranceLine.setText("Insurance (" + rental.getInsuranceName() + "):  " + money(insuranceDaily)
+                    + " × " + days + " days = " + money(insuranceTotal));
+            totalLine.setText("Total to pay:  " + money(carTotal.add(insuranceTotal)));
+            LocalDate planned = rental.getPlannedEndDate();
+            LocalDate chosen = returnPicker.getValue();
+            if (planned != null && chosen != null && chosen.isAfter(planned)) {
+                long late = ChronoUnit.DAYS.between(planned, chosen);
+                lateLine.setText("Returned " + late + (late == 1 ? " day" : " days") + " late (planned: "
+                        + format(planned) + ").");
+            } else {
+                lateLine.setText("Planned end: " + format(planned));
+            }
         };
-        return colors + " -fx-padding: 2 8 2 8; -fx-background-radius: 6; -fx-font-weight: bold; -fx-font-size: 11px;";
+        returnPicker.valueProperty().addListener((obs, oldValue, newValue) -> update.run());
+        update.run();
+
+        GridPane info = new GridPane();
+        info.setHgap(12);
+        info.setVgap(8);
+        info.addRow(0, new Label("Car"), new Label(rental.getCar().getDisplayName() + "  ·  " + rental.getCar().getPlateNumber()));
+        info.addRow(1, new Label("Customer"), new Label(rental.getCustomer().getFullName()));
+        info.addRow(2, new Label("Start date"), new Label(format(rental.getStartDate())));
+        info.addRow(3, new Label("Return date"), returnPicker);
+
+        VBox breakdown = new VBox(6, carLine, insuranceLine, styled(new Region(), "divider"),
+                totalLine, lateLine);
+        breakdown.getStyleClass().add("breakdown");
+        VBox content = new VBox(16, info, breakdown);
+        content.setPadding(new Insets(10, 4, 4, 4));
+        content.setPrefWidth(460);
+
+        Dialog<ButtonType> dialog = new Dialog<>();
+        dialog.setTitle("Return car");
+        dialog.setHeaderText("Return " + rental.getCar().getDisplayName());
+        ButtonType returnType = new ButtonType("Return car", ButtonBar.ButtonData.OK_DONE);
+        dialog.getDialogPane().getButtonTypes().addAll(returnType, ButtonType.CANCEL);
+        dialog.getDialogPane().setContent(content);
+
+        Button returnButton = (Button) dialog.getDialogPane().lookupButton(returnType);
+        returnButton.addEventFilter(ActionEvent.ACTION, event -> {
+            String error = null;
+            if (returnPicker.getValue() == null) {
+                error = "Please choose the return date.";
+            } else {
+                try {
+                    rentalService.returnCar(rental.getId(), returnPicker.getValue());
+                } catch (RuntimeException e) {
+                    error = e.getMessage() == null ? "The car could not be returned." : e.getMessage();
+                }
+            }
+            if (error != null) {
+                Dialogs.error(error);
+                event.consume();
+            }
+        });
+
+        dialog.showAndWait();
+        refresh();
+    }
+
+    // ------------------------------------------------------------------ helpers
+
+    private static BigDecimal dailyRate(Rental rental) {
+        return toDecimal(rental.getDailyPrice()).add(toDecimal(rental.getInsuranceDailyPriceOrZero()));
+    }
+
+    /** Same rule as the Rental entity: at least 1 day. */
+    private static long days(LocalDate start, LocalDate end) {
+        if (start == null || end == null) {
+            return 1;
+        }
+        return Math.max(1, ChronoUnit.DAYS.between(start, end));
+    }
+
+    private static <T extends Node> T styled(T node, String styleClass) {
+        node.getStyleClass().add(styleClass);
+        return node;
+    }
+
+    private static Label badge(String text, String styleClass) {
+        Label badge = new Label(text);
+        badge.getStyleClass().addAll("badge", styleClass);
+        return badge;
+    }
+
+    private static String format(LocalDate date) {
+        return date == null ? "-" : date.format(DATE);
     }
 
     private static String money(BigDecimal value) {
-        return value == null ? "-" : String.format(Locale.US, "%.2f", value);
+        return MONEY.format(value);
     }
 
-    private static Label bold(String text) {
-        Label label = new Label(text);
-        label.setStyle("-fx-font-weight: bold;");
-        return label;
+    /** Works whether the price is stored as BigDecimal or as a number. */
+    private static BigDecimal toDecimal(Object value) {
+        return value == null ? BigDecimal.ZERO : new BigDecimal(String.valueOf(value));
     }
 
-    private static <T> void configure(ComboBox<T> box, Function<T, String> text, String nullText) {
-        box.setCellFactory(listView -> new ListCell<>() {
+    private static <T> StringConverter<T> converter(Function<T, String> toText) {
+        return new StringConverter<>() {
             @Override
-            protected void updateItem(T item, boolean empty) {
-                super.updateItem(item, empty);
-                setText(empty ? null : (item == null ? nullText : text.apply(item)));
+            public String toString(T item) {
+                return item == null ? "" : toText.apply(item);
             }
-        });
-        box.setButtonCell(new ListCell<>() {
+
             @Override
-            protected void updateItem(T item, boolean empty) {
-                super.updateItem(item, empty);
-                setText(empty || item == null ? nullText : text.apply(item));
+            public T fromString(String text) {
+                return null;
             }
-        });
+        };
+    }
+
+    static void showCover(ImageView view, Image image, double width, double height) {
+        double imageWidth = image.getWidth();
+        double imageHeight = image.getHeight();
+        double targetRatio = width / height;
+        Rectangle2D viewport;
+        if (imageWidth / imageHeight > targetRatio) {
+            double cropWidth = imageHeight * targetRatio;
+            viewport = new Rectangle2D((imageWidth - cropWidth) / 2, 0, cropWidth, imageHeight);
+        } else {
+            double cropHeight = imageWidth / targetRatio;
+            viewport = new Rectangle2D(0, (imageHeight - cropHeight) / 2, imageWidth, cropHeight);
+        }
+        view.setImage(image);
+        view.setViewport(viewport);
+        view.setPreserveRatio(false);
+        view.setSmooth(true);
+        view.setFitWidth(width);
+        view.setFitHeight(height);
     }
 }

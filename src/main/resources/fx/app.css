@@ -463,3 +463,79 @@
     -fx-font-size: 11px;
     -fx-wrap-text: true;
 }
+
+/* ---------- Insurance and rentals (D4) ---------- */
+.plan-card {
+    -fx-padding: 22;
+    -fx-cursor: hand;
+}
+.plan-card-recommended {
+    -fx-border-color: #2563eb;
+    -fx-border-width: 2;
+}
+.plan-title {
+    -fx-font-size: 20px;
+    -fx-font-weight: bold;
+    -fx-text-fill: #0f172a;
+}
+.plan-big-price {
+    -fx-font-size: 30px;
+    -fx-font-weight: bold;
+    -fx-text-fill: #2563eb;
+}
+.plan-description {
+    -fx-text-fill: #334155;
+    -fx-line-spacing: 3;
+}
+.toggle-button.plan-option {
+    -fx-background-color: white;
+    -fx-border-color: #cbd5e1;
+    -fx-border-width: 1;
+    -fx-border-radius: 10;
+    -fx-background-radius: 10;
+    -fx-padding: 12 14 12 14;
+    -fx-alignment: TOP_LEFT;
+}
+.toggle-button.plan-option:hover {
+    -fx-border-color: #93c5fd;
+}
+.toggle-button.plan-option:selected {
+    -fx-background-color: #eff6ff;
+    -fx-border-color: #2563eb;
+    -fx-border-width: 2;
+}
+.toggle-button.plan-option:selected .label {
+    -fx-text-fill: #0f172a;
+}
+.toggle-button.plan-option:selected .badge-success { -fx-text-fill: #166534; }
+.toggle-button.plan-option:selected .badge-warning { -fx-text-fill: #92400e; }
+.toggle-button.plan-option:selected .hint { -fx-text-fill: #475569; }
+.plan-name {
+    -fx-font-size: 15px;
+    -fx-font-weight: bold;
+}
+.plan-price {
+    -fx-font-weight: bold;
+    -fx-text-fill: #2563eb;
+}
+.toggle-button.plan-option:selected .plan-price {
+    -fx-text-fill: #2563eb;
+}
+.breakdown {
+    -fx-background-color: #f8fafc;
+    -fx-border-color: #e2e8f0;
+    -fx-border-radius: 10;
+    -fx-background-radius: 10;
+    -fx-padding: 12 14 12 14;
+}
+.divider {
+    -fx-min-height: 1;
+    -fx-pref-height: 1;
+    -fx-max-height: 1;
+    -fx-background-color: #e2e8f0;
+}
+.total-line {
+    -fx-font-size: 17px;
+    -fx-font-weight: bold;
+    -fx-text-fill: #0f172a;
+}
